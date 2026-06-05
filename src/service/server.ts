@@ -29,22 +29,24 @@ function subKey(project: string, session?: string): string {
 
 function addSub(ws: ServerWebSocket<WsData>) {
   const { project, session } = ws.data;
-  // Always subscribe to project level
-  if (!projectSubs.has(project)) projectSubs.set(project, new Set());
-  projectSubs.get(project)!.add(ws);
-  // If session-level, also subscribe there
   if (session) {
+    // Session-level: only receives events for this session
     const key = subKey(project, session);
     if (!sessionSubs.has(key)) sessionSubs.set(key, new Set());
     sessionSubs.get(key)!.add(ws);
+  } else {
+    // Project-level: receives events from all sessions
+    if (!projectSubs.has(project)) projectSubs.set(project, new Set());
+    projectSubs.get(project)!.add(ws);
   }
 }
 
 function removeSub(ws: ServerWebSocket<WsData>) {
   const { project, session } = ws.data;
-  projectSubs.get(project)?.delete(ws);
   if (session) {
     sessionSubs.get(subKey(project, session))?.delete(ws);
+  } else {
+    projectSubs.get(project)?.delete(ws);
   }
 }
 
