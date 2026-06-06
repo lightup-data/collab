@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "collab": {
+      "command": "bun",
+      "args": ["src/client/client.ts"],
+      "env": {
+        "COLLAB_PROJECT": "",
+        "COLLAB_SESSION": "",
+        "COLLAB_USER": "",
+        "COLLAB_SERVICE_URL": "http://localhost:4321",
+        "COLLAB_PORT": "4321"
+      }
+    }
+  }
+}
