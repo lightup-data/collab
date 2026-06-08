@@ -8,6 +8,7 @@ interface ViewContext {
   token: string;
   userName: string;
   orgName: string;
+  orgSlug: string | null;
   email: string;
   slackConnected: boolean;
   cliInstalled: boolean;
@@ -77,39 +78,56 @@ function renderFloorSection(ctx: ViewContext, compact = false, state: StepState 
   }
 
   if (ctx.slackConnected) {
+    const slugRow = ctx.orgSlug
+      ? `<div class="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+           <div>
+             <p class="text-xs text-gray-400">Org identifier</p>
+             <p class="text-sm font-mono text-gray-700">${ctx.orgSlug}</p>
+           </div>
+           <form action="/settings/slug" method="POST" class="flex items-center gap-2">
+             <input type="hidden" name="token" value="${ctx.token}">
+             <input type="text" name="slug" value="${ctx.orgSlug}" class="px-2 py-1 border border-gray-200 rounded text-xs font-mono w-40 focus:ring-polaris-500 focus:border-polaris-500 outline-none hidden" id="slug-edit-${ctx.token.slice(-6)}">
+             <button type="button" onclick="const i=this.previousElementSibling;i.classList.toggle('hidden');if(!i.classList.contains('hidden'))i.focus()" class="text-xs text-gray-400 hover:text-gray-600">Edit</button>
+           </form>
+         </div>`
+      : `<div class="mt-3 pt-3 border-t border-gray-100">
+           <p class="text-xs text-gray-400">Org identifier: <span class="text-gray-500">not set (will be set from first floor connection)</span></p>
+         </div>`;
+
     return `
       <div>
-        ${sectionHeader("Floor")}
+        <div class="flex items-baseline gap-2 mb-3">
+          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Floor</h2>
+          ${statusBadge("Connected", true)}
+        </div>
         <div class="bg-white border border-gray-200 rounded-lg p-5">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-lg bg-[#4A154B] flex items-center justify-center shrink-0">
               ${slackIcon.replace('class="w-4 h-4"', 'class="w-5 h-5 text-white"')}
             </div>
             <div>
-              <div class="flex items-center gap-2">
-                <p class="text-sm font-semibold text-gray-900">Slack</p>
-                ${statusBadge("Connected", true)}
-              </div>
+              <p class="text-sm font-semibold text-gray-900">Slack</p>
               <p class="text-sm text-gray-500 mt-0.5">Workspace linked. Channels are auto-created for your projects.</p>
             </div>
           </div>
+          ${slugRow}
         </div>
       </div>`;
   }
 
   return sectionWrap(state, `
     <div>
-      ${sectionHeader("Floor")}
+      <div class="flex items-baseline gap-2 mb-3">
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Floor</h2>
+        ${statusBadge("Not connected", false)}
+      </div>
       <div class="bg-white border ${state === "active" ? cardClass("active") : "border-amber-200"} rounded-lg p-5">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
             <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
           </div>
           <div>
-            <div class="flex items-center gap-2">
-              <p class="text-sm font-semibold text-gray-900">Slack</p>
-              ${statusBadge("Not connected", false)}
-            </div>
+            <p class="text-sm font-semibold text-gray-900">Slack</p>
             <p class="text-sm text-gray-500 mt-0.5">Connect your Slack workspace to enable the floor for your team.</p>
           </div>
         </div>
@@ -127,7 +145,17 @@ function renderDevicesSection(ctx: ViewContext, devices: DeviceFixture[], state:
   if (devices.length > 0) {
     return `
       <div>
-        ${sectionHeader("Devices")}
+        <div class="flex items-baseline gap-2 mb-3">
+          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Devices</h2>
+          ${statusBadge(`${devices.length} connected`, true)}
+        </div>
+        <details class="mb-3">
+          <summary class="text-xs text-polaris-700 hover:text-polaris-800 font-medium cursor-pointer select-none">+ Add another device</summary>
+          <div class="mt-2 bg-white border border-gray-200 rounded-lg p-4">
+            <p class="text-sm text-gray-500">Run on any new machine:</p>
+            ${copyBlock("npx @lightupai/polaris login")}
+          </div>
+        </details>
         <div class="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
           ${devices.map((d) => renderDeviceRow(d)).join("")}
         </div>
@@ -137,24 +165,21 @@ function renderDevicesSection(ctx: ViewContext, devices: DeviceFixture[], state:
   // Setup state — no devices yet
   return sectionWrap(state, `
     <div>
-      ${sectionHeader("Devices")}
+      <div class="flex items-baseline gap-2 mb-3">
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Devices</h2>
+        ${ctx.cliInstalled ? statusBadge("Installed", true) : statusBadge("Not installed", false)}
+      </div>
       <div class="bg-white border ${state === "active" ? cardClass("active") : "border-gray-200"} rounded-lg p-5">
-        <div class="flex items-center gap-2">
-          <p class="text-sm font-semibold text-gray-900">Install the CLI on your first device</p>
-          ${ctx.cliInstalled ? statusBadge("Installed", true) : statusBadge("Not installed", false)}
-        </div>
-        <p class="text-sm text-gray-500 mt-1">${ctx.cliInstalled
-          ? "Polaris is set up. Run the same command on other machines to add them."
-          : "Run this in your terminal. Repeat on each machine you work from."}</p>
-        ${ctx.cliInstalled
-          ? ""
-          : copyBlock("npx @lightup/polaris login")}
+        <p class="text-sm font-semibold text-gray-900">${ctx.cliInstalled ? "Add another device" : "Set up Polaris on your first device"}</p>
+        <p class="text-sm text-gray-500 mt-1">Run this in your terminal${ctx.cliInstalled ? " on any new machine" : ". Repeat on each machine you work from"}.</p>
+        ${copyBlock("npx @lightupai/polaris login")}
       </div>
     </div>`);
 }
 
 function renderDeviceRow(device: DeviceFixture): string {
-  const isOnline = device.activeSession;
+  const recentThreshold = Date.now() - 60 * 60 * 1000; // 1 hour
+  const isOnline = device.activeSession || new Date(device.lastSeen).getTime() > recentThreshold;
   return `
     <div class="p-4 flex items-center justify-between">
       <div class="flex items-center gap-3">
@@ -172,10 +197,8 @@ function renderDeviceRow(device: DeviceFixture): string {
         </div>
       </div>
       <div class="text-right">
-        ${isOnline
-          ? `<p class="text-xs font-medium text-gray-700">${device.activeSession}</p>
-             <p class="text-xs text-gray-400">Active now</p>`
-          : `<p class="text-xs text-gray-400">Last seen ${new Date(device.lastSeen).toLocaleDateString()}</p>`}
+        ${device.activeSession ? `<p class="text-xs font-medium text-gray-700">${device.activeSession}</p>` : ""}
+        <p class="text-xs text-gray-400">${isOnline ? "Online" : "Offline"} · ${new Date(device.lastSeen).toLocaleString()}</p>
       </div>
     </div>`;
 }
@@ -187,6 +210,13 @@ function renderProjectsSessionsSection(ctx: ViewContext, sessions: SessionFixtur
     return `
       <div>
         ${sectionHeader("Projects & Sessions")}
+        <details class="mb-3">
+          <summary class="text-xs text-polaris-700 hover:text-polaris-800 font-medium cursor-pointer select-none">+ Join another session</summary>
+          <div class="mt-2 bg-white border border-gray-200 rounded-lg p-4">
+            <p class="text-sm text-gray-500">Inside your AI agent, run:</p>
+            ${copyBlock("/polaris join &lt;project&gt; &lt;session&gt;")}
+          </div>
+        </details>
         <div class="space-y-3">
           ${sessions.map((s) => renderSessionCard(s, ctx.userName)).join("")}
         </div>
@@ -200,12 +230,12 @@ function renderProjectsSessionsSection(ctx: ViewContext, sessions: SessionFixtur
   // Setup state — no sessions yet
   return sectionWrap(state, `
     <div>
-      ${sectionHeader("Projects & Sessions")}
+      <div class="flex items-baseline gap-2 mb-3">
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Projects & Sessions</h2>
+        ${ctx.hasConnectedSession ? statusBadge("Connected", true) : statusBadge("Waiting", false)}
+      </div>
       <div class="bg-white border ${state === "active" ? cardClass("active") : "border-gray-200"} rounded-lg p-5">
-        <div class="flex items-center gap-2">
-          <p class="text-sm font-semibold text-gray-900">Connect your first session</p>
-          ${ctx.hasConnectedSession ? statusBadge("Connected", true) : statusBadge("Waiting", false)}
-        </div>
+        <p class="text-sm font-semibold text-gray-900">Connect your first session</p>
         <p class="text-sm text-gray-500 mt-1">${ctx.hasConnectedSession
           ? "You've connected a session. You're ready to collaborate."
           : "Inside your AI agent (Claude Code, Cursor, etc.), run:"}</p>
@@ -264,6 +294,20 @@ function renderProjectCard(project: ProjectFixture): string {
     </div>`;
 }
 
+// --- Auto-refresh script ---
+
+function autoRefreshScript(token: string): string {
+  return `
+    <script>
+    (function() {
+      const evtSource = new EventSource('/api/dashboard-events?token=${token}');
+      evtSource.onmessage = function(e) {
+        if (e.data === 'refresh') window.location.reload();
+      };
+    })();
+    </script>`;
+}
+
 // --- Setup view (zero state) ---
 // Same three sections, but each shows its setup prompt instead of live data.
 
@@ -284,7 +328,8 @@ export function renderSetupView(ctx: ViewContext, devices: DeviceFixture[] = [])
       ${renderFloorSection(ctx, false, stepState("floor"))}
       ${renderDevicesSection(ctx, ctx.cliInstalled ? devices : [], stepState("devices"))}
       ${renderProjectsSessionsSection(ctx, [], [], stepState("sessions"))}
-    </div>`;
+    </div>
+    ${autoRefreshScript(ctx.token)}`;
 }
 
 // --- Error view ---
@@ -313,7 +358,8 @@ export function renderActiveView(ctx: ViewContext, sessions: SessionFixture[], p
       ${renderFloorSection(ctx, true)}
       ${renderDevicesSection(ctx, devices)}
       ${renderProjectsSessionsSection(ctx, sessions, projects)}
-    </div>`;
+    </div>
+    ${autoRefreshScript(ctx.token)}`;
 }
 
 // --- Profile view ---

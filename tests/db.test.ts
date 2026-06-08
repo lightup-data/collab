@@ -23,7 +23,7 @@ import {
 } from "../src/service/db";
 import type { PolarisEvent } from "../src/types";
 
-const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://polaris:polaris@localhost:5432/polaris";
+const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://polaris:polaris@localhost:5432/polaris_test";
 
 let sql: Sql;
 

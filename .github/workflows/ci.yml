@@ -24,7 +24,7 @@ jobs:
           --health-retries 5
 
     env:
-      DATABASE_URL: postgres://polaris:polaris@localhost:5432/polaris
+      DATABASE_URL: postgres://polaris:polaris@localhost:5432/polaris_test
 
     steps:
       - uses: actions/checkout@v4
@@ -34,5 +34,8 @@ jobs:
           bun-version: latest
 
       - run: bun install
+
+      - name: Create test database
+        run: PGPASSWORD=polaris psql -h localhost -U polaris -d polaris -c "CREATE DATABASE polaris_test OWNER polaris;"
 
       - run: bun test

@@ -9,6 +9,7 @@ import {
   getUserByEmail,
   upsertUser,
   setOrgSlack,
+  getSessionEvents,
   type Sql,
 } from "../service/db";
 import { layout, nav } from "./layout";
@@ -155,15 +156,33 @@ export function createApp(sql: Sql) {
     const org = await getOrg(sql, payload.org_id);
     if (!org) return c.redirect("/login");
 
-    // TODO: detect cliInstalled (check if user has ever hit /auth/token from CLI)
-    // TODO: detect hasConnectedSession (check if user has any sessions as driver in DB)
+    // Detect setup status from system events
+    let cliInstalled = false;
+    const devices: Array<{ name: string; lastSeen: string; os: string; activeSession?: string }> = [];
+    try {
+      const systemEvents = await getSessionEvents(sql, payload.org_id, "_system", "_system");
+      for (const e of systemEvents) {
+        const text = (e.payload as { stop_response?: string }).stop_response ?? "";
+        const match = text.match(/^Device connected: (.+) \((.+)\)$/);
+        if (match) {
+          cliInstalled = true;
+          // Deduplicate by device name, keep latest
+          const existing = devices.findIndex((d) => d.name === match[1]);
+          const device = { name: match[1], os: match[2], lastSeen: e.timestamp };
+          if (existing >= 0) devices[existing] = device;
+          else devices.push(device);
+        }
+      }
+    } catch { /* _system project may not exist yet */ }
+
     const ctx = {
       token,
       userName: payload.name,
       orgName: org.name,
+      orgSlug: org.slug,
       email: payload.email,
       slackConnected: !!org.slack_team_id,
-      cliInstalled: false,
+      cliInstalled,
       hasConnectedSession: false,
     };
 
@@ -171,9 +190,9 @@ export function createApp(sql: Sql) {
     const activeSessions: unknown[] = [];
 
     if (activeSessions.length > 0) {
-      return layout(renderActiveView(ctx, [], []), "Polaris");
+      return layout(renderActiveView(ctx, [], [], devices), "Polaris");
     }
-    return layout(renderSetupView(ctx), "Polaris");
+    return layout(renderSetupView(ctx, devices), "Polaris");
   });
 
   // --- Profile ---
@@ -192,6 +211,7 @@ export function createApp(sql: Sql) {
       token,
       userName: payload.name,
       orgName: org.name,
+      orgSlug: org.slug,
       email: payload.email,
       slackConnected: !!org.slack_team_id,
       cliInstalled: false,
@@ -205,9 +225,9 @@ export function createApp(sql: Sql) {
 
   app.get("/preview", (c) => {
     const mockToken = "preview-token";
-    const base = { token: mockToken, userName: mockUser.name, orgName: mockOrg.name, email: mockUser.email };
+    const base = { token: mockToken, userName: mockUser.name, orgName: mockOrg.name, orgSlug: "lightup-data" as string | null, email: mockUser.email };
 
-    const fresh       = { ...base, slackConnected: false, cliInstalled: false, hasConnectedSession: false };
+    const fresh       = { ...base, orgSlug: null, slackConnected: false, cliInstalled: false, hasConnectedSession: false };
     const slackDone   = { ...base, slackConnected: true,  cliInstalled: false, hasConnectedSession: false };
     const cliDone     = { ...base, slackConnected: true,  cliInstalled: true,  hasConnectedSession: false };
     const allDone     = { ...base, slackConnected: true,  cliInstalled: true,  hasConnectedSession: true };
@@ -333,7 +353,7 @@ export function createApp(sql: Sql) {
         redirect_uri: process.env.SLACK_REDIRECT_URI ?? "http://localhost:3000/slack/callback",
       }),
     });
-    const slackData = (await slackRes.json()) as { ok: boolean; team?: { id: string }; access_token?: string; error?: string };
+    const slackData = (await slackRes.json()) as { ok: boolean; team?: { id: string; name?: string }; access_token?: string; error?: string };
 
     if (!slackData.ok) {
       // Check if Slack is already connected (e.g., stale callback reload)
@@ -348,18 +368,97 @@ export function createApp(sql: Sql) {
     let systemChannelId: string | undefined;
     try {
       systemChannelId = await createSystemChannel(slackData.access_token!, payload.email);
-      await postSystemEvent(
-        slackData.access_token!,
-        systemChannelId,
-        `:star: *${payload.name}* connected this Slack workspace to Polaris`,
-        `Organization: ${payload.org_id}`
-      );
+      await postSystemEvent({
+        sql,
+        orgId: payload.org_id,
+        sender: payload.participant_id,
+        text: `:star: *${payload.name}* connected this Slack workspace to Polaris`,
+        context: `Organization: ${payload.org_id}`,
+        botToken: slackData.access_token!,
+        channelId: systemChannelId,
+      });
     } catch {
       // Non-fatal — Slack is connected even if channel creation fails
     }
 
-    await setOrgSlack(sql, payload.org_id, slackData.team!.id, slackData.access_token!, systemChannelId);
+    // Set org slug from Slack workspace name if not already set
+    const currentOrg = await getOrg(sql, payload.org_id);
+    const slug = currentOrg?.slug ? undefined : (slackData.team?.name?.toLowerCase().replace(/\s+/g, "-") ?? undefined);
+    await setOrgSlack(sql, payload.org_id, slackData.team!.id, slackData.access_token!, systemChannelId, slug);
+    notifyDashboard(payload.org_id);
     return c.redirect(`/dashboard?token=${state}`);
+  });
+
+  // --- Dashboard SSE (real-time status updates) ---
+
+  const dashboardListeners = new Map<string, Set<ReadableStreamDefaultController<Uint8Array>>>(); // orgId → controllers
+
+  function notifyDashboard(orgId: string) {
+    const controllers = dashboardListeners.get(orgId);
+    if (!controllers) return;
+    const data = `data: refresh\n\n`;
+    const bytes = new TextEncoder().encode(data);
+    for (const ctrl of controllers) {
+      try { ctrl.enqueue(bytes); } catch { controllers.delete(ctrl); }
+    }
+  }
+
+  // Expose notifyDashboard so other parts of the app can trigger it
+  (app as unknown as { notifyDashboard: typeof notifyDashboard }).notifyDashboard = notifyDashboard;
+
+  app.get("/api/dashboard-events", async (c) => {
+    const token = c.req.query("token");
+    if (!token) return c.json({ error: "No token" }, 400);
+    const payload = await verifyToken(token);
+    if (!payload) return c.json({ error: "Invalid token" }, 401);
+
+    const orgId = payload.org_id;
+    let controller: ReadableStreamDefaultController<Uint8Array>;
+    const stream = new ReadableStream<Uint8Array>({
+      start(ctrl) {
+        controller = ctrl;
+        if (!dashboardListeners.has(orgId)) dashboardListeners.set(orgId, new Set());
+        dashboardListeners.get(orgId)!.add(controller);
+      },
+      cancel() {
+        dashboardListeners.get(orgId)?.delete(controller);
+      },
+    });
+
+    return new Response(stream, {
+      headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
+    });
+  });
+
+  app.post("/api/notify-dashboard", async (c) => {
+    const auth = c.req.header("Authorization");
+    if (!auth?.startsWith("Bearer ")) return c.json({ error: "Unauthorized" }, 401);
+    const payload = await verifyToken(auth.slice(7));
+    if (!payload) return c.json({ error: "Invalid token" }, 401);
+    notifyDashboard(payload.org_id);
+    return c.json({ ok: true });
+  });
+
+  app.get("/api/dashboard-status", async (c) => {
+    const token = c.req.query("token");
+    if (!token) return c.json({ error: "No token" }, 400);
+    const payload = await verifyToken(token);
+    if (!payload) return c.json({ error: "Invalid token" }, 401);
+
+    const org = await getOrg(sql, payload.org_id);
+    const slackConnected = !!org?.slack_team_id;
+
+    let cliInstalled = false;
+    try {
+      const systemEvents = await getSessionEvents(sql, payload.org_id, "_system", "_system");
+      cliInstalled = systemEvents.some((e) =>
+        (e.payload as { stop_response?: string }).stop_response?.startsWith("Device connected:")
+      );
+    } catch { /* _system may not exist */ }
+
+    const hasConnectedSession = false; // TODO
+
+    return c.json({ slackConnected, cliInstalled, hasConnectedSession });
   });
 
   // --- CLI auth flow ---

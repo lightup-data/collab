@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Polaris CLI wrapper
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
+exec npx bun "$DIR/src/cli/cli.ts" "$@"

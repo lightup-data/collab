@@ -1,4 +1,7 @@
-// --- Slack system channel: create, post events ---
+// --- Slack system channel: create, post events, persist to DB ---
+
+import { pushEvent, createProject, getProject, getOrg, type Sql } from "../service/db";
+import type { PolarisEvent } from "../types";
 
 const SYSTEM_CHANNEL_NAME = "polaris-system";
 
@@ -78,30 +81,84 @@ export async function createSystemChannel(botToken: string, inviteEmail?: string
   throw new Error(`Failed to create or find #${SYSTEM_CHANNEL_NAME} channel: ${createRes.error}`);
 }
 
-// Post a system event to the #polaris channel.
-export async function postSystemEvent(
-  botToken: string,
-  channelId: string,
-  text: string,
-  context?: string
-): Promise<void> {
-  const blocks: Array<Record<string, unknown>> = [
-    {
-      type: "section",
-      text: { type: "mrkdwn", text },
-    },
-  ];
+// Ensure the _system project exists for an org.
+async function ensureSystemProject(sql: Sql, orgId: string): Promise<void> {
+  const existing = await getProject(sql, orgId, "_system");
+  if (!existing) {
+    try {
+      await createProject(sql, orgId, "_system");
+    } catch {
+      // Already exists (race condition)
+    }
+  }
+}
 
-  if (context) {
-    blocks.push({
-      type: "context",
-      elements: [{ type: "mrkdwn", text: context }],
+// Post a system event — persists to DB and optionally posts to Slack.
+export async function postSystemEvent(opts: {
+  sql: Sql;
+  orgId: string;
+  sender: string;
+  text: string;
+  context?: string;
+  botToken?: string;
+  channelId?: string;
+}): Promise<void> {
+  const { sql, orgId, sender, text, context, botToken, channelId } = opts;
+
+  // Persist to DB under _system project and _system session
+  await ensureSystemProject(sql, orgId);
+  const event: PolarisEvent = {
+    id: crypto.randomUUID(),
+    project: "_system",
+    session: "_system",
+    timestamp: new Date().toISOString(),
+    source: "inject",
+    sender: sender as PolarisEvent["sender"],
+    payload: {
+      type: "inject" as const,
+      content: context ? `${text}\n${context}` : text,
+      sender: sender as PolarisEvent["sender"],
+      target: "_system",
+    },
+  };
+  await pushEvent(sql, orgId, event);
+
+  // Post to Slack if connected
+  if (botToken && channelId) {
+    const blocks: Array<Record<string, unknown>> = [
+      {
+        type: "section",
+        text: { type: "mrkdwn", text },
+      },
+    ];
+
+    if (context) {
+      blocks.push({
+        type: "context",
+        elements: [{ type: "mrkdwn", text: context }],
+      });
+    }
+
+    await slackApi(botToken, "chat.postMessage", {
+      channel: channelId,
+      text,
+      blocks,
     });
   }
+}
 
-  await slackApi(botToken, "chat.postMessage", {
-    channel: channelId,
-    text, // fallback for notifications
-    blocks,
-  });
+// Post a _system event to Slack if the org has credentials.
+// Called by the cloud service when it receives a _system project event.
+export async function postToSlackSystemChannel(sql: Sql, orgId: string, text: string): Promise<void> {
+  try {
+    const org = await getOrg(sql, orgId);
+    if (!org?.slack_bot_token || !org?.slack_system_channel_id) return;
+
+    await slackApi(org.slack_bot_token, "chat.postMessage", {
+      channel: org.slack_system_channel_id,
+      text,
+    });
+  } catch {
+    // Non-fatal
+  }
 }

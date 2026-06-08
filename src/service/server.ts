@@ -1,8 +1,10 @@
 import { type Server, type ServerWebSocket } from "bun";
 import { z } from "zod";
+import { postToSlackSystemChannel } from "../slack/system";
 import {
   createDb,
   createOrg,
+  getOrg,
   createProject,
   getProject,
   createSession,
@@ -285,7 +287,12 @@ export async function startServer(opts: {
 
       params = matchRoute(method, pathname, "/projects/:proj/sessions/:sess/events", "POST");
       if (params) {
-        const session = await getSession(sql, orgId, params.proj, params.sess);
+        let session = await getSession(sql, orgId, params.proj, params.sess);
+        if (!session && params.proj === "_system") {
+          // Auto-create _system project and session
+          try { await createProject(sql, orgId, "_system"); } catch { /* exists */ }
+          try { session = await createSession(sql, orgId, "_system", "_system", null); } catch { session = await getSession(sql, orgId, "_system", "_system"); }
+        }
         if (!session) return error("Session not found", 404);
         const body = await jsonBody(req);
         const parsed = z
@@ -304,6 +311,15 @@ export async function startServer(opts: {
         await pushEvent(sql, orgId, event);
         broadcastEvent(event);
         broadcastSse(event);
+
+        // Forward _system events to Slack
+        if (params.proj === "_system") {
+          const text = (parsed.data.payload as { stop_response?: string; prompt?: string }).stop_response
+            ?? (parsed.data.payload as { prompt?: string }).prompt
+            ?? "System event";
+          await postToSlackSystemChannel(sql, orgId, `:computer: *${parsed.data.sender}*: ${text}`);
+        }
+
         return json(event, 201);
       }
 
