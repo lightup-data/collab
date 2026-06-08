@@ -1,7 +1,6 @@
 {
-  "name": "polaris",
+  "name": "@lightupai/polaris",
   "version": "0.0.1",
-  "private": true,
   "type": "module",
   "bin": {
     "polaris": "src/cli/cli.ts"
