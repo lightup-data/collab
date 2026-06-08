@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeAll, afterAll, beforeEach } from "bun:test";
-import { renderSetupView, renderActiveView, renderProfileView } from "../src/web/views";
+import { renderSetupView, renderActiveView, renderProfileView, renderErrorView } from "../src/web/views";
 import { nav } from "../src/web/layout";
 import {
   mockUser,
@@ -218,6 +218,35 @@ describe("fixtures", () => {
   });
 });
 
+// --- Error view ---
+
+describe("renderErrorView", () => {
+  test("renders error message", () => {
+    const html = renderErrorView("Something went wrong.");
+    expect(html).toContain("Something went wrong.");
+  });
+
+  test("renders with action link", () => {
+    const html = renderErrorView("Auth failed.", "Try again", "/login");
+    expect(html).toContain("Auth failed.");
+    expect(html).toContain("Try again");
+    expect(html).toContain('href="/login"');
+  });
+
+  test("renders without action link when not provided", () => {
+    const html = renderErrorView("Oops.");
+    // The error card itself should not contain an action link (nav has its own links)
+    const cardHtml = html.split("bg-red-100")[1] ?? "";
+    expect(cardHtml).not.toContain("Try again");
+  });
+
+  test("renders warning icon", () => {
+    const html = renderErrorView("Error");
+    expect(html).toContain("bg-red-100");
+    expect(html).toContain("text-red-600");
+  });
+});
+
 // --- Route behavior ---
 
 describe("routes", () => {
@@ -317,5 +346,75 @@ describe("routes", () => {
   test("GET /auth/token with invalid token returns 401", async () => {
     const res = await app.request("/auth/token?token=bad");
     expect(res.status).toBe(401);
+  });
+
+  test("GET /auth/token without token returns 400", async () => {
+    const res = await app.request("/auth/token");
+    expect(res.status).toBe(400);
+  });
+
+  // --- Slack routes ---
+
+  test("GET /slack/install without SLACK_CLIENT_ID shows error", async () => {
+    const origId = process.env.SLACK_CLIENT_ID;
+    delete process.env.SLACK_CLIENT_ID;
+    const res = await app.request(`/slack/install?token=${validToken}`);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("Slack integration not configured");
+    if (origId) process.env.SLACK_CLIENT_ID = origId;
+  });
+
+  test("GET /slack/install with SLACK_CLIENT_ID redirects to Slack", async () => {
+    process.env.SLACK_CLIENT_ID = "fake-client-id";
+    const res = await app.request(`/slack/install?token=${validToken}`);
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("slack.com/oauth");
+    expect(location).toContain("fake-client-id");
+    delete process.env.SLACK_CLIENT_ID;
+  });
+
+  test("GET /slack/callback without code/state shows error", async () => {
+    const res = await app.request("/slack/callback");
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("Missing code or state");
+  });
+
+  test("GET /slack/callback with invalid token redirects to login", async () => {
+    const res = await app.request("/slack/callback?code=test&state=bad-token");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/login");
+  });
+
+  // --- Unified auth ---
+
+  test("GET /signup redirects to Google OAuth", async () => {
+    const res = await app.request("/signup");
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("accounts.google.com");
+  });
+
+  test("GET /login redirects to Google OAuth", async () => {
+    const res = await app.request("/login");
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("accounts.google.com");
+  });
+
+  test("GET /auth/google/callback without params shows error", async () => {
+    const res = await app.request("/auth/google/callback");
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("Missing code or state");
+  });
+
+  test("GET /auth/google/callback with invalid state shows error", async () => {
+    const res = await app.request("/auth/google/callback?code=test&state=bad-state");
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("Invalid or expired OAuth state");
   });
 });
