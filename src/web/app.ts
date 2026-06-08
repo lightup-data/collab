@@ -14,6 +14,7 @@ import {
 import { layout, nav } from "./layout";
 import { renderSetupView, renderActiveView, renderProfileView, renderErrorView } from "./views";
 import { renderLandingPage } from "./pages";
+import { createSystemChannel, postSystemEvent } from "../slack/system";
 import {
   mockUser,
   mockOrg,
@@ -326,7 +327,21 @@ export function createApp(sql: Sql) {
       return layout(renderErrorView(`Slack connection failed: ${slackData.error}`, "Back to dashboard", `/dashboard?token=${state}`));
     }
 
-    await setOrgSlack(sql, payload.org_id, slackData.team!.id, slackData.access_token!);
+    // Create the #polaris system channel
+    let systemChannelId: string | undefined;
+    try {
+      systemChannelId = await createSystemChannel(slackData.access_token!, payload.email);
+      await postSystemEvent(
+        slackData.access_token!,
+        systemChannelId,
+        `:star: *${payload.name}* connected this Slack workspace to Polaris`,
+        `Organization: ${payload.org_id}`
+      );
+    } catch {
+      // Non-fatal — Slack is connected even if channel creation fails
+    }
+
+    await setOrgSlack(sql, payload.org_id, slackData.team!.id, slackData.access_token!, systemChannelId);
     return c.redirect(`/dashboard?token=${state}`);
   });
 
