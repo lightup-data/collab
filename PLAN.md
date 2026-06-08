@@ -1,76 +1,76 @@
-# Collab: Bidirectional Coding Agent Session Bridge
+# Polaris: Bidirectional Coding Agent Session Bridge
 
 ## Context
 
 We're building the first feature for the Lightup project — a system that **captures every interaction** in a coding agent session (user messages, agent responses, tool calls, tool results) and **injects external messages** into the session. This enables multiplayer collaboration where teammates and external systems can observe and participate in coding agent sessions. The system is model-agnostic — it works with any coding agent (e.g., Claude Code, Cursor, Windsurf).
 
-Collab is a **SaaS service**. Organizations sign up, connect their Slack workspace, and team members authenticate via SSO. The cloud service is the central broker and system of record.
+Polaris is a **SaaS service**. Organizations sign up, connect their Slack workspace, and team members authenticate via SSO. The cloud service is the central broker and system of record.
 
 ## Organization & Auth
 
-### Org Signup (Admin, web app at collab.dev)
+### Org Signup (Admin, web app at polaris.dev)
 
-1. Admin visits `collab.dev`, signs up with **Google SSO**
+1. Admin visits `polaris.dev`, signs up with **Google SSO**
 2. Creates an **organization** (e.g., `lightup`)
 3. Admin dashboard:
-   - **Connect Slack workspace** — OAuth flow, collab gets a bot token
+   - **Connect Slack workspace** — OAuth flow, polaris gets a bot token
    - **Invite team members** — by email, or auto-join by email domain
    - **Manage projects** — create, archive, view activity
 
 ### Slack Connection (Admin, web app)
 
-Admin clicks "Connect Slack" → Slack OAuth → collab receives bot token + workspace user list (with emails). The **Slack bridge is server-side** — managed by the SaaS, not deployed by the user. One bridge per org.
+Admin clicks "Connect Slack" → Slack OAuth → polaris receives bot token + workspace user list (with emails). The **Slack bridge is server-side** — managed by the SaaS, not deployed by the user. One bridge per org.
 
 ### User Auth (each team member, one-time per machine)
 
 ```sh
-npx @lightup/collab login
+npx @lightup/polaris login
 ```
 
-Opens browser → Google SSO (same provider as the org) → callback stores a token in `~/.collab/credentials.json`.
+Opens browser → Google SSO (same provider as the org) → callback stores a token in `~/.polaris/credentials.json`.
 
 The token carries:
 - **User identity** — derived from Google profile (e.g., `user:manu`)
 - **Org membership** — which org this user belongs to
-- **Service URL** — the collab SaaS endpoint
+- **Service URL** — the polaris SaaS endpoint
 
 The `login` command also installs:
 - Local daemon (as a persistent service — launchd on Mac, systemd on Linux)
 - MCP server config → `~/.claude/` (global, works in every project and Claude Desktop)
 - Hook config → `~/.claude/settings.json`
 - Status line config → `~/.claude/settings.json`
-- `/collab` skill → `~/.claude/skills/collab/SKILL.md`
+- `/polaris` skill → `~/.claude/skills/polaris/SKILL.md`
 
 **One command sets up everything.**
 
-### Identity Mapping (Slack ↔ Collab)
+### Identity Mapping (Slack ↔ Polaris)
 
 The user's **email is the common key** between Google SSO and Slack:
 
-- When admin connects Slack (OAuth), collab gets the workspace user list with emails
-- When a user logs in via Google SSO, collab has their email
-- **Automatic match**: collab user `user:manu` (manu@lightup.com) ↔ Slack user `@manu` (manu@lightup.com)
+- When admin connects Slack (OAuth), polaris gets the workspace user list with emails
+- When a user logs in via Google SSO, polaris has their email
+- **Automatic match**: polaris user `user:manu` (manu@lightup.com) ↔ Slack user `@manu` (manu@lightup.com)
 
-When a collab event is posted to Slack, it shows the user's Slack identity (avatar, display name). When someone posts in Slack, the bridge resolves Slack user → email → collab identity.
+When a polaris event is posted to Slack, it shows the user's Slack identity (avatar, display name). When someone posts in Slack, the bridge resolves Slack user → email → polaris identity.
 
 **Edge cases:**
 - **Email mismatch** (different Google vs Slack emails) — admin dashboard has manual override to link accounts
-- **No Slack account** — collab posts as the bot with attribution: `collab-bot: [user:manu] built the auth middleware`
-- **Slack-only advisor** (no collab account) — Slack display name used as identity: `slack:krishna`
+- **No Slack account** — polaris posts as the bot with attribution: `polaris-bot: [user:manu] built the auth middleware`
+- **Slack-only advisor** (no polaris account) — Slack display name used as identity: `slack:krishna`
 
 ## Participants: Humans and Agents
 
-Every participant in collab — whether human or AI agent — has an **identity** with a type prefix:
+Every participant in polaris — whether human or AI agent — has an **identity** with a type prefix:
 
 - `user:manu`, `user:krishna`, `user:priya` — humans (identity from SSO)
 - `agent:test-writer`, `agent:security-reviewer` — agents
-- `slack:someone` — Slack-only participants without a collab account
+- `slack:someone` — Slack-only participants without a polaris account
 
-Agents are **first-class participants**. They can be drivers or advisors, same as humans. Collab treats them identically — the cloud service doesn't distinguish between human and agent clients.
+Agents are **first-class participants**. They can be drivers or advisors, same as humans. Polaris treats them identically — the cloud service doesn't distinguish between human and agent clients.
 
-**Spawning**: humans create sessions and start agents out of band (not managed by collab in v1).
+**Spawning**: humans create sessions and start agents out of band (not managed by polaris in v1).
 
-**Privileges & HITL**: agent permissions, approval flows, and escalation paths are configured outside collab. Collab's job is context pooling, capture, injection, and broadcast — not authorization.
+**Privileges & HITL**: agent permissions, approval flows, and escalation paths are configured outside polaris. Polaris's job is context pooling, capture, injection, and broadcast — not authorization.
 
 **Addressed messaging**: every injection specifies a **target** — a specific session within the project. No blind broadcast into all sessions.
 
@@ -78,7 +78,7 @@ Agents are **first-class participants**. They can be drivers or advisors, same a
 
 ### Organizations
 
-An **organization** is the top-level account. Created via signup on `collab.dev`. All projects, users, and integrations are scoped to an org.
+An **organization** is the top-level account. Created via signup on `polaris.dev`. All projects, users, and integrations are scoped to an org.
 
 ### Projects
 
@@ -118,7 +118,7 @@ The driver role on a session can transfer from one person to another:
 
 ### Step 1: Admin signs up org (once)
 
-On `collab.dev`:
+On `polaris.dev`:
 1. Google SSO → org created
 2. Connect Slack workspace → OAuth
 3. Invite team (or set auto-join by email domain)
@@ -126,7 +126,7 @@ On `collab.dev`:
 ### Step 2: User sets up machine (once per machine)
 
 ```sh
-npx @lightup/collab login
+npx @lightup/polaris login
 ```
 
 Browser opens → Google SSO → token stored → daemon installed → MCP/hooks/skill/status line configured in `~/.claude/`. Done.
@@ -135,7 +135,7 @@ Browser opens → Google SSO → token stored → daemon installed → MCP/hooks
 
 Inside any coding agent:
 ```
-/collab join my-project fxm
+/polaris join my-project fxm
 ```
 
 Project is scoped to the user's org (from token). User identity is from SSO. Session is created if it doesn't exist, or joined if it does. The Slack channel `#my-project` is auto-created by the server-side bridge if this is the first session in this project.
@@ -182,7 +182,7 @@ Project pj (org: lightup)
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│                    Collab SaaS (collab.dev)                    │
+│                    Polaris SaaS (polaris.dev)                    │
 │                                                               │
 │  Web App:                                                     │
 │    Signup (Google SSO) | Org dashboard | Slack OAuth           │
@@ -220,17 +220,17 @@ Project pj (org: lightup)
 │                                                               │
 │  Daemon (port 4321, one per machine):                         │
 │    Routes hook events by CC session_id                        │
-│    Manages WS connections to cloud (one per collab session)   │
-│    Auth token from ~/.collab/credentials.json                 │
+│    Manages WS connections to cloud (one per polaris session)   │
+│    Auth token from ~/.polaris/credentials.json                 │
 │                                                               │
 │  MCP Server (one per coding agent session, stdio):            │
 │    Registers with daemon on startup                           │
-│    collab_connect | collab_reply | collab_context tools       │
+│    polaris_connect | polaris_reply | polaris_context tools       │
 │    claude/channel capability for advisor injection            │
 │                                                               │
 │  Hooks (capture.sh → POST localhost:4321/events)              │
 │  Status Line (queries daemon for connection state)            │
-│  /collab Skill (slash command UX)                             │
+│  /polaris Skill (slash command UX)                             │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -250,7 +250,7 @@ src/
   slack/
     bridge.ts           # Slack ↔ cloud bridge (server-side, Socket Mode)
     format.ts           # Event → Slack mrkdwn formatting
-    identity.ts         # Email-based Slack ↔ collab user mapping
+    identity.ts         # Email-based Slack ↔ polaris user mapping
   cli/
     cli.ts              # CLI: login, daemon, status
   web/
@@ -259,7 +259,7 @@ hooks/
   capture.sh            # Shell script: reads hook JSON stdin, POSTs to daemon
   statusline.sh         # Status line script: queries daemon, formats output
 skills/
-  collab/SKILL.md       # /collab slash command skill definition
+  polaris/SKILL.md       # /polaris slash command skill definition
 tests/
   types.test.ts         # Schema validation tests
   db.test.ts            # Persistence layer tests
@@ -298,26 +298,26 @@ docker-compose.yml      # Local dev (Postgres)
 - `src/web/app.ts` — web app: signup flow, dashboard, Slack OAuth
 - Add org + user tables to Postgres schema
 - All API endpoints require auth, scope to org
-- `src/cli/cli.ts` — `collab login` command (browser SSO flow + local setup)
+- `src/cli/cli.ts` — `polaris login` command (browser SSO flow + local setup)
 
-### Phase 5: Local Daemon + `/collab` Skill + Status Line
+### Phase 5: Local Daemon + `/polaris` Skill + Status Line
 
-The local architecture uses a **single daemon per machine** that routes between multiple concurrent coding agent sessions. Users interact through the `/collab` slash command.
+The local architecture uses a **single daemon per machine** that routes between multiple concurrent coding agent sessions. Users interact through the `/polaris` slash command.
 
-#### `/collab` Slash Command (Skill)
+#### `/polaris` Slash Command (Skill)
 
-`skills/collab/SKILL.md` — the primary UX. Installed to `~/.claude/skills/collab/` by `collab login`.
+`skills/polaris/SKILL.md` — the primary UX. Installed to `~/.claude/skills/polaris/` by `polaris login`.
 
-- `/collab join <project> <session>` — connects the current coding agent session to a collab session. Creates the session if it doesn't exist. Project scoped to user's org (from token). User identity from SSO.
-- `/collab` (no args) — shows status: connected project/session/user, or "not connected".
-- `/collab disconnect` — disconnects from the current session.
+- `/polaris join <project> <session>` — connects the current coding agent session to a polaris session. Creates the session if it doesn't exist. Project scoped to user's org (from token). User identity from SSO.
+- `/polaris` (no args) — shows status: connected project/session/user, or "not connected".
+- `/polaris disconnect` — disconnects from the current session.
 
 Example:
 ```
-/collab join pj fxm              ← connect to project pj, session fxm
-/collab                          ← check status
-/collab join pj fxk              ← switch to different session
-/collab disconnect               ← disconnect
+/polaris join pj fxm              ← connect to project pj, session fxm
+/polaris                          ← check status
+/polaris join pj fxk              ← switch to different session
+/polaris disconnect               ← disconnect
 ```
 
 #### Status Line
@@ -326,44 +326,44 @@ Persistent bar at the bottom of the coding agent CLI. Always visible, updates af
 
 When connected:
 ```
-collab: pj/fxm (user:manu) ● connected
+polaris: pj/fxm (user:manu) ● connected
 ```
 
 When disconnected:
 ```
-collab: not connected
+polaris: not connected
 ```
 
 - `hooks/statusline.sh` — queries daemon's `GET /status/:cc-session-id`, formats output
-- Installed to `~/.claude/settings.json` by `collab login`
+- Installed to `~/.claude/settings.json` by `polaris login`
 
 #### Daemon
 
 `src/daemon/daemon.ts` — persistent process on port 4321 (one per machine):
   - `POST /events` ← hooks POST here (routes via `session_id` in hook JSON)
-  - `POST /register` ← MCP servers register their CC session → collab session mapping on startup
-  - `POST /connect` ← `/collab join` triggers this to bind a CC session to a collab session
-  - `POST /disconnect` ← `/collab disconnect` triggers this
+  - `POST /register` ← MCP servers register their CC session → polaris session mapping on startup
+  - `POST /connect` ← `/polaris join` triggers this to bind a CC session to a polaris session
+  - `POST /disconnect` ← `/polaris disconnect` triggers this
   - `GET /status/:cc-session-id` ← status line script queries this
-  - Auth token from `~/.collab/credentials.json` for all cloud API calls
-  - Manages WebSocket connections to cloud service (one per active collab session)
+  - Auth token from `~/.polaris/credentials.json` for all cloud API calls
+  - Manages WebSocket connections to cloud service (one per active polaris session)
   - Routes advisor messages from cloud to the correct MCP server instance
 
 #### MCP Client
 
 `src/client/client.ts` — MCP channel server (stdio only, no HTTP):
   - Registers with daemon on startup (sends CC session_id)
-  - Exposes tools: `collab_connect`, `collab_disconnect`, `collab_status`, `collab_reply`, `collab_context`
+  - Exposes tools: `polaris_connect`, `polaris_disconnect`, `polaris_status`, `polaris_reply`, `polaris_context`
   - `claude/channel` capability for injecting advisor messages
   - Receives advisor messages from daemon via IPC
 
 #### CLI
 
 `src/cli/cli.ts`:
-  - `collab login` — browser SSO → token stored → daemon + MCP + hooks + skill + status line installed
-  - `collab daemon` — starts the daemon (normally auto-started)
-  - `collab status` — shows all active sessions and daemon health
-  - `collab logout` — removes token and local config
+  - `polaris login` — browser SSO → token stored → daemon + MCP + hooks + skill + status line installed
+  - `polaris daemon` — starts the daemon (normally auto-started)
+  - `polaris status` — shows all active sessions and daemon health
+  - `polaris logout` — removes token and local config
 
 ### Phase 6: Slack Bridge (Floor, server-side)
 
@@ -387,7 +387,7 @@ The Slack bridge runs server-side as part of the SaaS — not deployed by the us
 
 #### Identity Mapping
 
-`src/slack/identity.ts` — email-based Slack ↔ collab user mapping:
+`src/slack/identity.ts` — email-based Slack ↔ polaris user mapping:
   - Automatic match via shared email between Google SSO and Slack workspace
   - Admin override in dashboard for email mismatches
   - Slack-only participants get `slack:displayname` identity
@@ -407,18 +407,18 @@ The Slack bridge runs server-side as part of the SaaS — not deployed by the us
 
 ## Key Design Decisions
 
-1. **SaaS with SSO** — organizations sign up on collab.dev, users authenticate via Google SSO. No self-hosted setup for end users.
+1. **SaaS with SSO** — organizations sign up on polaris.dev, users authenticate via Google SSO. No self-hosted setup for end users.
 2. **Email-based identity mapping** — Google SSO email = Slack email. Automatic, no manual mapping. Admin override for mismatches.
-3. **One command machine setup** — `collab login` installs everything: daemon, MCP, hooks, skill, status line.
-4. **One slash command to connect** — `/collab join project session` from inside any coding agent. No terminal switching.
+3. **One command machine setup** — `polaris login` installs everything: daemon, MCP, hooks, skill, status line.
+4. **One slash command to connect** — `/polaris join project session` from inside any coding agent. No terminal switching.
 5. **Agents are first-class** — same identity model as humans (`agent:name` vs `user:name`). Spawned out of band. Privileges/HITL managed externally.
 6. **Addressed messaging** — every injection targets a specific session. No blind broadcasts.
 7. **Project-level context pooling** — all events persisted under the project. Sibling activity on-demand, not auto-injected.
 8. **One driver per session, multiple sessions per project** — concurrent human and agent drivers.
-9. **Status line** — persistent collab connection indicator in the coding agent CLI. Queries daemon, updates every turn.
+9. **Status line** — persistent polaris connection indicator in the coding agent CLI. Queries daemon, updates every turn.
 10. **Single daemon per machine** — routes hook events and cloud messages between multiple concurrent coding agent sessions.
 11. **Server-side Slack bridge** — managed by the SaaS, not by the user. Auto-creates channels. Email-based identity mapping.
-12. **`/collab` slash command** — single entry point: join, disconnect, status.
+12. **`/polaris` slash command** — single entry point: join, disconnect, status.
 13. **Postgres on Hetzner** — persistent, production-ready from day one.
 14. **Flat names** — project names unique within an org, session names unique within a project.
 
@@ -426,13 +426,13 @@ The Slack bridge runs server-side as part of the SaaS — not deployed by the us
 
 - `bun test` covers all unit + integration tests
 - Manual end-to-end test:
-  1. Sign up org on collab.dev, connect Slack
-  2. `npx @lightup/collab login` — authenticate, install local components
-  3. Open coding agent, `/collab join pj fxm` — verify status line shows connected
+  1. Sign up org on polaris.dev, connect Slack
+  2. `npx @lightup/polaris login` — authenticate, install local components
+  3. Open coding agent, `/polaris join pj fxm` — verify status line shows connected
   4. Send a prompt → verify it appears in Slack `#pj` attributed to `user:manu/fxm`
-  5. Another user: `/collab join pj fxk` — verify both sessions broadcast to `#pj`
+  5. Another user: `/polaris join pj fxk` — verify both sessions broadcast to `#pj`
   6. Post in Slack targeting `fxk` → verify it appears in Krishna's session
-  7. Manu asks "what has Krishna done?" → `collab_context` fetches `fxk` history
+  7. Manu asks "what has Krishna done?" → `polaris_context` fetches `fxk` history
   8. Handoff `fxm` from Manu → Krishna → verify transition in Slack
-  9. Verify Slack identity mapping (collab user shows as correct Slack profile)
+  9. Verify Slack identity mapping (polaris user shows as correct Slack profile)
 - CI gate: GitHub Actions runs `bun test` on PRs

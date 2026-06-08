@@ -14,7 +14,7 @@ import {
   getEventsSince,
   type Sql,
 } from "./db";
-import type { CollabEvent, ParticipantId } from "../types";
+import type { PolarisEvent, ParticipantId } from "../types";
 import { HookPayload, InjectMessage, ParticipantId as ParticipantIdSchema } from "../types";
 
 // --- WebSocket subscriber management ---
@@ -50,7 +50,7 @@ function removeSub(ws: ServerWebSocket<WsData>) {
   }
 }
 
-function broadcastEvent(event: CollabEvent) {
+function broadcastEvent(event: PolarisEvent) {
   const msg = JSON.stringify(event);
   // Broadcast to project-level subscribers
   for (const ws of projectSubs.get(event.project) ?? []) {
@@ -90,7 +90,7 @@ function removeSse(controller: SseController, project: string, session?: string)
   }
 }
 
-function broadcastSse(event: CollabEvent) {
+function broadcastSse(event: PolarisEvent) {
   const data = `data: ${JSON.stringify(event)}\n\n`;
   const bytes = new TextEncoder().encode(data);
   for (const ctrl of projectSseClients.get(event.project) ?? []) {
@@ -296,7 +296,7 @@ export async function startServer(opts: { port?: number; databaseUrl?: string } 
           })
           .safeParse(body);
         if (!parsed.success) return error(`Invalid body: ${parsed.error.message}`, 400);
-        const event: CollabEvent = {
+        const event: PolarisEvent = {
           id: crypto.randomUUID(),
           project: params.proj,
           session: params.sess,
@@ -350,7 +350,7 @@ export async function startServer(opts: { port?: number; databaseUrl?: string } 
           })
           .safeParse(body);
         if (!parsed.success) return error(`Invalid body: ${parsed.error.message}`, 400);
-        const event: CollabEvent = {
+        const event: PolarisEvent = {
           id: crypto.randomUUID(),
           project: params.proj,
           session: params.sess,
@@ -424,5 +424,5 @@ export async function startServer(opts: { port?: number; databaseUrl?: string } 
 // --- Run if executed directly ---
 if (import.meta.main) {
   const { server } = await startServer();
-  console.error(`Collab server listening on port ${server.port}`);
+  console.error(`Polaris server listening on port ${server.port}`);
 }

@@ -13,9 +13,9 @@ import {
   getEventsSince,
   type Sql,
 } from "../src/service/db";
-import type { CollabEvent } from "../src/types";
+import type { PolarisEvent } from "../src/types";
 
-const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://collab:collab@localhost:5432/collab";
+const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://polaris:polaris@localhost:5432/polaris";
 
 let sql: Sql;
 
@@ -32,7 +32,7 @@ afterAll(async () => {
   await sql.end();
 });
 
-function makeEvent(overrides: Partial<CollabEvent> = {}): CollabEvent {
+function makeEvent(overrides: Partial<PolarisEvent> = {}): PolarisEvent {
   return {
     id: crypto.randomUUID(),
     project: "pj",

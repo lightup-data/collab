@@ -1,14 +1,14 @@
 services:
-  postgres:
+  polaris-postgres:
     image: postgres:17
     environment:
-      POSTGRES_USER: collab
-      POSTGRES_PASSWORD: collab
-      POSTGRES_DB: collab
+      POSTGRES_USER: polaris
+      POSTGRES_PASSWORD: polaris
+      POSTGRES_DB: polaris
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - polaris-pgdata:/var/lib/postgresql/data
 
 volumes:
-  pgdata:
+  polaris-pgdata:

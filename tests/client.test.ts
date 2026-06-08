@@ -2,7 +2,7 @@ import { describe, expect, test, beforeAll, afterAll, beforeEach } from "bun:tes
 import { startServer } from "../src/service/server";
 import type { Sql } from "../src/service/db";
 
-const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://collab:collab@localhost:5432/collab";
+const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://polaris:polaris@localhost:5432/polaris";
 
 let serviceUrl: string;
 let sql: Sql;
@@ -199,7 +199,7 @@ describe("capture.sh", () => {
     // Run the actual capture.sh script
     const proc = Bun.spawn(["sh", "hooks/capture.sh"], {
       stdin: "pipe",
-      env: { ...process.env, COLLAB_PORT: String(localServer.port) },
+      env: { ...process.env, POLARIS_PORT: String(localServer.port) },
     });
     proc.stdin.write(hookPayload);
     proc.stdin.end();
@@ -220,7 +220,7 @@ describe("capture.sh", () => {
   test("script exits 0 even when server is down", async () => {
     const proc = Bun.spawn(["sh", "hooks/capture.sh"], {
       stdin: "pipe",
-      env: { ...process.env, COLLAB_PORT: "59999" },
+      env: { ...process.env, POLARIS_PORT: "59999" },
     });
     proc.stdin.write('{"test": true}');
     proc.stdin.end();

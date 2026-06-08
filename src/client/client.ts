@@ -16,14 +16,14 @@ export interface ClientConfig {
 }
 
 function getConfig(): ClientConfig {
-  const project = process.env.COLLAB_PROJECT;
-  const session = process.env.COLLAB_SESSION;
-  const user = process.env.COLLAB_USER;
-  const serviceUrl = process.env.COLLAB_SERVICE_URL ?? "http://localhost:4321";
-  const localPort = Number(process.env.COLLAB_PORT ?? 4321);
+  const project = process.env.POLARIS_PROJECT;
+  const session = process.env.POLARIS_SESSION;
+  const user = process.env.POLARIS_USER;
+  const serviceUrl = process.env.POLARIS_SERVICE_URL ?? "http://localhost:4321";
+  const localPort = Number(process.env.POLARIS_PORT ?? 4321);
 
   if (!project || !session || !user) {
-    console.error("Required env vars: COLLAB_PROJECT, COLLAB_SESSION, COLLAB_USER");
+    console.error("Required env vars: POLARIS_PROJECT, POLARIS_SESSION, POLARIS_USER");
     process.exit(1);
   }
 
@@ -52,13 +52,13 @@ export async function startClient(config: ClientConfig) {
   // --- MCP Channel Server ---
 
   const mcp = new Server(
-    { name: "collab", version: "0.0.1" },
+    { name: "polaris", version: "0.0.1" },
     {
       capabilities: {
         experimental: { "claude/channel": {} },
         tools: {},
       },
-      instructions: `You are connected to a collab session. Messages from advisors and teammates arrive as <channel source="collab" from="..."> tags. Use the collab_reply tool to send messages back. Use the collab_context tool to fetch activity from sibling sessions in this project.`,
+      instructions: `You are connected to a polaris session. Messages from advisors and teammates arrive as <channel source="polaris" from="..."> tags. Use the polaris_reply tool to send messages back. Use the polaris_context tool to fetch activity from sibling sessions in this project.`,
     }
   );
 
@@ -67,7 +67,7 @@ export async function startClient(config: ClientConfig) {
   mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       {
-        name: "collab_reply",
+        name: "polaris_reply",
         description: "Send a message back to the project floor (visible to all advisors and the Slack/WhatsApp channel)",
         inputSchema: {
           type: "object" as const,
@@ -78,7 +78,7 @@ export async function startClient(config: ClientConfig) {
         },
       },
       {
-        name: "collab_context",
+        name: "polaris_context",
         description: "Fetch activity from a sibling session in this project. Use this to see what other drivers have been doing.",
         inputSchema: {
           type: "object" as const,
@@ -94,20 +94,20 @@ export async function startClient(config: ClientConfig) {
   mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { name, arguments: args } = req.params;
 
-    if (name === "collab_reply") {
+    if (name === "polaris_reply") {
       const message = (args as { message: string }).message;
       await servicePost(serviceUrl, `/projects/${project}/sessions/${session}/events`, {
         sender: user,
         payload: {
           hook_event_name: "Stop",
-          session_id: "collab-reply",
+          session_id: "polaris-reply",
           stop_response: message,
         },
       });
       return { content: [{ type: "text", text: "Reply sent to the floor." }] };
     }
 
-    if (name === "collab_context") {
+    if (name === "polaris_context") {
       const targetSession = (args as { session: string }).session;
       const res = await serviceGet(serviceUrl, `/projects/${project}/sessions/${targetSession}/messages`);
       if (!res.ok) {
@@ -145,7 +145,7 @@ export async function startClient(config: ClientConfig) {
             method: "notifications/claude/channel",
             params: {
               content,
-              meta: { from: sender, session: data.session, source: "collab" },
+              meta: { from: sender, session: data.session, source: "polaris" },
             },
           });
         }
@@ -205,7 +205,7 @@ export async function startClient(config: ClientConfig) {
   const transport = new StdioServerTransport();
   await mcp.connect(transport);
 
-  console.error(`Collab client started: ${project}/${session} as ${user}`);
+  console.error(`Polaris client started: ${project}/${session} as ${user}`);
   console.error(`Hook relay on http://127.0.0.1:${localPort}/events`);
   console.error(`Connected to ${serviceUrl}`);
 
