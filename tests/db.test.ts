@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, afterAll } from "bun:test";
 import {
   createDb,
+  createOrg,
   createProject,
   getProject,
   createSession,
@@ -24,8 +25,11 @@ beforeEach(async () => {
   await sql`DROP TABLE IF EXISTS events`;
   await sql`DROP TABLE IF EXISTS sessions`;
   await sql`DROP TABLE IF EXISTS projects`;
+  await sql`DROP TABLE IF EXISTS users`;
+  await sql`DROP TABLE IF EXISTS orgs`;
   await sql.end();
   sql = await createDb(DATABASE_URL);
+  await createOrg(sql, "test-org", "Test Org");
 });
 
 afterAll(async () => {
@@ -51,125 +55,125 @@ function makeEvent(overrides: Partial<PolarisEvent> = {}): PolarisEvent {
 
 describe("projects", () => {
   test("create and retrieve a project", async () => {
-    const project = await createProject(sql, "pj");
+    const project = await createProject(sql, "test-org", "pj");
     expect(project.name).toBe("pj");
     expect(project.created_at).toBeDefined();
 
-    const retrieved = await getProject(sql, "pj");
+    const retrieved = await getProject(sql, "test-org", "pj");
     expect(retrieved).not.toBeNull();
     expect(retrieved!.name).toBe("pj");
   });
 
   test("duplicate project name throws", async () => {
-    await createProject(sql, "pj");
-    expect(createProject(sql, "pj")).rejects.toThrow();
+    await createProject(sql, "test-org", "pj");
+    expect(createProject(sql, "test-org", "pj")).rejects.toThrow();
   });
 
   test("get nonexistent project returns null", async () => {
-    expect(await getProject(sql, "nope")).toBeNull();
+    expect(await getProject(sql, "test-org", "nope")).toBeNull();
   });
 });
 
 describe("sessions", () => {
   beforeEach(async () => {
-    await createProject(sql, "pj");
+    await createProject(sql, "test-org", "pj");
   });
 
   test("create and retrieve a session", async () => {
-    const session = await createSession(sql, "pj", "fxm", "user:manu");
+    const session = await createSession(sql, "test-org", "pj", "fxm", "user:manu");
     expect(session.name).toBe("fxm");
     expect(session.project).toBe("pj");
     expect(session.driver).toBe("user:manu");
 
-    const retrieved = await getSession(sql, "pj", "fxm");
+    const retrieved = await getSession(sql, "test-org", "pj", "fxm");
     expect(retrieved).not.toBeNull();
     expect(retrieved!.driver).toBe("user:manu");
   });
 
   test("create session with null driver", async () => {
-    const session = await createSession(sql, "pj", "open-session", null);
+    const session = await createSession(sql, "test-org", "pj", "open-session", null);
     expect(session.driver).toBeNull();
   });
 
   test("duplicate session name in same project throws", async () => {
-    await createSession(sql, "pj", "fxm", "user:manu");
-    expect(createSession(sql, "pj", "fxm", "user:krishna")).rejects.toThrow();
+    await createSession(sql, "test-org", "pj", "fxm", "user:manu");
+    expect(createSession(sql, "test-org", "pj", "fxm", "user:krishna")).rejects.toThrow();
   });
 
   test("same session name in different projects is fine", async () => {
-    await createProject(sql, "pj2");
-    await createSession(sql, "pj", "fxm", "user:manu");
-    const s2 = await createSession(sql, "pj2", "fxm", "user:krishna");
+    await createProject(sql, "test-org", "pj2");
+    await createSession(sql, "test-org", "pj", "fxm", "user:manu");
+    const s2 = await createSession(sql, "test-org", "pj2", "fxm", "user:krishna");
     expect(s2.driver).toBe("user:krishna");
   });
 
   test("get nonexistent session returns null", async () => {
-    expect(await getSession(sql, "pj", "nope")).toBeNull();
+    expect(await getSession(sql, "test-org", "pj", "nope")).toBeNull();
   });
 
   test("set driver", async () => {
-    await createSession(sql, "pj", "fxm", "user:manu");
-    await setDriver(sql, "pj", "fxm", "user:krishna");
-    const session = await getSession(sql, "pj", "fxm");
+    await createSession(sql, "test-org", "pj", "fxm", "user:manu");
+    await setDriver(sql, "test-org", "pj", "fxm", "user:krishna");
+    const session = await getSession(sql, "test-org", "pj", "fxm");
     expect(session!.driver).toBe("user:krishna");
   });
 
   test("clear driver", async () => {
-    await createSession(sql, "pj", "fxm", "user:manu");
-    await clearDriver(sql, "pj", "fxm");
-    const session = await getSession(sql, "pj", "fxm");
+    await createSession(sql, "test-org", "pj", "fxm", "user:manu");
+    await clearDriver(sql, "test-org", "pj", "fxm");
+    const session = await getSession(sql, "test-org", "pj", "fxm");
     expect(session!.driver).toBeNull();
   });
 });
 
 describe("events", () => {
   beforeEach(async () => {
-    await createProject(sql, "pj");
-    await createSession(sql, "pj", "fxm", "user:manu");
-    await createSession(sql, "pj", "fxk", "user:krishna");
+    await createProject(sql, "test-org", "pj");
+    await createSession(sql, "test-org", "pj", "fxm", "user:manu");
+    await createSession(sql, "test-org", "pj", "fxk", "user:krishna");
   });
 
   test("push and retrieve events by project", async () => {
     const e1 = makeEvent({ session: "fxm", timestamp: "2026-06-05T10:00:00.000Z" });
     const e2 = makeEvent({ session: "fxk", sender: "user:krishna", timestamp: "2026-06-05T10:01:00.000Z" });
-    await pushEvent(sql, e1);
-    await pushEvent(sql, e2);
+    await pushEvent(sql, "test-org", e1);
+    await pushEvent(sql, "test-org", e2);
 
-    const events = await getProjectEvents(sql, "pj");
+    const events = await getProjectEvents(sql, "test-org", "pj");
     expect(events).toHaveLength(2);
     expect(events[0].session).toBe("fxm");
     expect(events[1].session).toBe("fxk");
   });
 
   test("retrieve events by session", async () => {
-    await pushEvent(sql, makeEvent({ session: "fxm" }));
-    await pushEvent(sql, makeEvent({ session: "fxk", sender: "user:krishna" }));
-    await pushEvent(sql, makeEvent({ session: "fxm" }));
+    await pushEvent(sql, "test-org", makeEvent({ session: "fxm" }));
+    await pushEvent(sql, "test-org", makeEvent({ session: "fxk", sender: "user:krishna" }));
+    await pushEvent(sql, "test-org", makeEvent({ session: "fxm" }));
 
-    const fxmEvents = await getSessionEvents(sql, "pj", "fxm");
+    const fxmEvents = await getSessionEvents(sql, "test-org", "pj", "fxm");
     expect(fxmEvents).toHaveLength(2);
 
-    const fxkEvents = await getSessionEvents(sql, "pj", "fxk");
+    const fxkEvents = await getSessionEvents(sql, "test-org", "pj", "fxk");
     expect(fxkEvents).toHaveLength(1);
   });
 
   test("events are ordered by timestamp", async () => {
-    await pushEvent(sql, makeEvent({ session: "fxm", timestamp: "2026-06-05T10:02:00.000Z" }));
-    await pushEvent(sql, makeEvent({ session: "fxm", timestamp: "2026-06-05T10:00:00.000Z" }));
-    await pushEvent(sql, makeEvent({ session: "fxm", timestamp: "2026-06-05T10:01:00.000Z" }));
+    await pushEvent(sql, "test-org", makeEvent({ session: "fxm", timestamp: "2026-06-05T10:02:00.000Z" }));
+    await pushEvent(sql, "test-org", makeEvent({ session: "fxm", timestamp: "2026-06-05T10:00:00.000Z" }));
+    await pushEvent(sql, "test-org", makeEvent({ session: "fxm", timestamp: "2026-06-05T10:01:00.000Z" }));
 
-    const events = await getSessionEvents(sql, "pj", "fxm");
+    const events = await getSessionEvents(sql, "test-org", "pj", "fxm");
     expect(events[0].timestamp).toBe("2026-06-05T10:00:00.000Z");
     expect(events[1].timestamp).toBe("2026-06-05T10:01:00.000Z");
     expect(events[2].timestamp).toBe("2026-06-05T10:02:00.000Z");
   });
 
   test("getEventsSince filters by timestamp", async () => {
-    await pushEvent(sql, makeEvent({ timestamp: "2026-06-05T10:00:00.000Z" }));
-    await pushEvent(sql, makeEvent({ timestamp: "2026-06-05T10:01:00.000Z" }));
-    await pushEvent(sql, makeEvent({ timestamp: "2026-06-05T10:02:00.000Z" }));
+    await pushEvent(sql, "test-org", makeEvent({ timestamp: "2026-06-05T10:00:00.000Z" }));
+    await pushEvent(sql, "test-org", makeEvent({ timestamp: "2026-06-05T10:01:00.000Z" }));
+    await pushEvent(sql, "test-org", makeEvent({ timestamp: "2026-06-05T10:02:00.000Z" }));
 
-    const events = await getEventsSince(sql, "pj", "2026-06-05T10:00:30.000Z");
+    const events = await getEventsSince(sql, "test-org", "pj", "2026-06-05T10:00:30.000Z");
     expect(events).toHaveLength(2);
     expect(events[0].timestamp).toBe("2026-06-05T10:01:00.000Z");
   });
@@ -184,13 +188,13 @@ describe("events", () => {
         target: "fxm",
       },
     });
-    await pushEvent(sql, event);
+    await pushEvent(sql, "test-org", event);
 
-    const events = await getSessionEvents(sql, "pj", "fxm");
+    const events = await getSessionEvents(sql, "test-org", "pj", "fxm");
     expect(events[0].payload).toEqual(event.payload);
   });
 
   test("empty project returns empty array", async () => {
-    expect(await getProjectEvents(sql, "pj")).toEqual([]);
+    expect(await getProjectEvents(sql, "test-org", "pj")).toEqual([]);
   });
 });

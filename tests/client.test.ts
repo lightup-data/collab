@@ -32,11 +32,16 @@ beforeEach(async () => {
   await sql`DROP TABLE IF EXISTS events`;
   await sql`DROP TABLE IF EXISTS sessions`;
   await sql`DROP TABLE IF EXISTS projects`;
-  await sql`CREATE TABLE IF NOT EXISTS projects (name TEXT PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
-  await sql`CREATE TABLE IF NOT EXISTS sessions (name TEXT NOT NULL, project TEXT NOT NULL REFERENCES projects(name), driver TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (project, name))`;
-  await sql`CREATE TABLE IF NOT EXISTS events (id UUID PRIMARY KEY, project TEXT NOT NULL, session TEXT NOT NULL, timestamp TIMESTAMPTZ NOT NULL, source TEXT NOT NULL, sender TEXT NOT NULL, payload JSONB NOT NULL)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_events_project ON events(project, timestamp)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_events_session ON events(project, session, timestamp)`;
+  await sql`DROP TABLE IF EXISTS users`;
+  await sql`DROP TABLE IF EXISTS orgs`;
+  await sql`CREATE TABLE IF NOT EXISTS orgs (id TEXT PRIMARY KEY, name TEXT NOT NULL, domain TEXT, slack_team_id TEXT, slack_bot_token TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
+  await sql`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, org_id TEXT NOT NULL REFERENCES orgs(id), participant_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
+  await sql`CREATE TABLE IF NOT EXISTS projects (name TEXT NOT NULL, org_id TEXT NOT NULL REFERENCES orgs(id), created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (org_id, name))`;
+  await sql`CREATE TABLE IF NOT EXISTS sessions (name TEXT NOT NULL, project TEXT NOT NULL, org_id TEXT NOT NULL, driver TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (org_id, project, name), FOREIGN KEY (org_id, project) REFERENCES projects(org_id, name))`;
+  await sql`CREATE TABLE IF NOT EXISTS events (id UUID PRIMARY KEY, org_id TEXT NOT NULL, project TEXT NOT NULL, session TEXT NOT NULL, timestamp TIMESTAMPTZ NOT NULL, source TEXT NOT NULL, sender TEXT NOT NULL, payload JSONB NOT NULL)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_events_project ON events(org_id, project, timestamp)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_events_session ON events(org_id, project, session, timestamp)`;
+  await sql`INSERT INTO orgs (id, name) VALUES ('default', 'Default') ON CONFLICT DO NOTHING`;
 });
 
 async function post(base: string, path: string, body: unknown) {
