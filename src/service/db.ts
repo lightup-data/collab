@@ -1,10 +1,10 @@
 import postgres from "postgres";
-import type { CollabEvent, Project, Session, ParticipantId } from "../types";
+import type { PolarisEvent, Project, Session, ParticipantId } from "../types";
 
 export type Sql = postgres.Sql;
 
 export async function createDb(connectionString?: string): Promise<Sql> {
-  const sql = postgres(connectionString ?? process.env.DATABASE_URL ?? "postgres://collab:collab@localhost:5432/collab");
+  const sql = postgres(connectionString ?? process.env.DATABASE_URL ?? "postgres://polaris:polaris@localhost:5432/polaris");
 
   await sql`
     CREATE TABLE IF NOT EXISTS projects (
@@ -108,7 +108,7 @@ export async function clearDriver(sql: Sql, project: string, session: string): P
   `;
 }
 
-export async function pushEvent(sql: Sql, event: CollabEvent): Promise<void> {
+export async function pushEvent(sql: Sql, event: PolarisEvent): Promise<void> {
   await sql`
     INSERT INTO events (id, project, session, timestamp, source, sender, payload)
     VALUES (${event.id}, ${event.project}, ${event.session}, ${event.timestamp}, ${event.source}, ${event.sender}, ${sql.json(event.payload)})
@@ -123,33 +123,33 @@ function rowToEvent(row: {
   source: string;
   sender: string;
   payload: unknown;
-}): CollabEvent {
+}): PolarisEvent {
   return {
     id: row.id,
     project: row.project,
     session: row.session,
     timestamp: row.timestamp.toISOString(),
-    source: row.source as CollabEvent["source"],
+    source: row.source as PolarisEvent["source"],
     sender: row.sender as ParticipantId,
-    payload: row.payload as CollabEvent["payload"],
+    payload: row.payload as PolarisEvent["payload"],
   };
 }
 
-export async function getProjectEvents(sql: Sql, project: string): Promise<CollabEvent[]> {
+export async function getProjectEvents(sql: Sql, project: string): Promise<PolarisEvent[]> {
   const rows = await sql`
     SELECT * FROM events WHERE project = ${project} ORDER BY timestamp ASC
   `;
   return rows.map(rowToEvent);
 }
 
-export async function getSessionEvents(sql: Sql, project: string, session: string): Promise<CollabEvent[]> {
+export async function getSessionEvents(sql: Sql, project: string, session: string): Promise<PolarisEvent[]> {
   const rows = await sql`
     SELECT * FROM events WHERE project = ${project} AND session = ${session} ORDER BY timestamp ASC
   `;
   return rows.map(rowToEvent);
 }
 
-export async function getEventsSince(sql: Sql, project: string, since: string): Promise<CollabEvent[]> {
+export async function getEventsSince(sql: Sql, project: string, since: string): Promise<PolarisEvent[]> {
   const rows = await sql`
     SELECT * FROM events WHERE project = ${project} AND timestamp > ${since} ORDER BY timestamp ASC
   `;

@@ -77,7 +77,7 @@ export type ReplyMessage = z.infer<typeof ReplyMessage>;
 export const EventSource = z.enum(["hook", "inject", "reply"]);
 export type EventSource = z.infer<typeof EventSource>;
 
-export const CollabEvent = z.object({
+export const PolarisEvent = z.object({
   id: z.string().uuid(),
   project: z.string().min(1),
   session: z.string().min(1),
@@ -87,7 +87,7 @@ export const CollabEvent = z.object({
   payload: z.union([HookPayload, InjectMessage, ReplyMessage]),
 });
 
-export type CollabEvent = z.infer<typeof CollabEvent>;
+export type PolarisEvent = z.infer<typeof PolarisEvent>;
 
 // --- Project & Session Models ---
 

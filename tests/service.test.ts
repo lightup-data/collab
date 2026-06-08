@@ -3,7 +3,7 @@ import { startServer } from "../src/service/server";
 import type { Sql } from "../src/service/db";
 import type { Server } from "bun";
 
-const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://collab:collab@localhost:5432/collab";
+const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://polaris:polaris@localhost:5432/polaris";
 
 let base: string;
 let sql: Sql;

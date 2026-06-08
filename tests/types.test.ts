@@ -4,7 +4,7 @@ import {
   HookPayload,
   InjectMessage,
   ReplyMessage,
-  CollabEvent,
+  PolarisEvent,
   Project,
   Session,
 } from "../src/types";
@@ -154,9 +154,9 @@ describe("ReplyMessage", () => {
   });
 });
 
-describe("CollabEvent", () => {
+describe("PolarisEvent", () => {
   test("parses a full hook event envelope", () => {
-    const result = CollabEvent.parse({
+    const result = PolarisEvent.parse({
       id: "550e8400-e29b-41d4-a716-446655440000",
       project: "pj",
       session: "fxm",
@@ -174,7 +174,7 @@ describe("CollabEvent", () => {
   });
 
   test("parses an inject event envelope", () => {
-    const result = CollabEvent.parse({
+    const result = PolarisEvent.parse({
       id: "550e8400-e29b-41d4-a716-446655440001",
       project: "pj",
       session: "fxm",
@@ -193,7 +193,7 @@ describe("CollabEvent", () => {
 
   test("rejects invalid source", () => {
     expect(() =>
-      CollabEvent.parse({
+      PolarisEvent.parse({
         id: "550e8400-e29b-41d4-a716-446655440002",
         project: "pj",
         session: "fxm",

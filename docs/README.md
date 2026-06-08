@@ -1,10 +1,10 @@
-# Collab
+# Polaris
 
 Multiplayer collaboration for AI agents and humans. Capture, share, and coordinate across agent sessions — with humans and AI agents working together on any kind of work. Model-agnostic: works with any AI agent (e.g., Claude Code, Cursor, custom agents).
 
-## What Collab Does
+## What Polaris Does
 
-Collab connects AI agent sessions to a shared cloud service, enabling teams to collaborate in real time on any kind of work — software development, data analysis, event planning, and more.
+Polaris connects AI agent sessions to a shared cloud service, enabling teams to collaborate in real time on any kind of work — software development, data analysis, event planning, and more.
 
 - **Capture** every interaction in a agent session — user prompts, agent responses, tool calls — and broadcast it to your team
 - **Inject** context from teammates or agents into a live agent session so the agent can incorporate it immediately
@@ -87,7 +87,7 @@ The log is continuous across handoffs — one unbroken narrative of how the work
 
 ### The Floor
 
-Each project has a floor — a shared space backed by a messaging platform (Slack, WhatsApp, Discord, or any platform with a collab bridge). The floor shows:
+Each project has a floor — a shared space backed by a messaging platform (Slack, WhatsApp, Discord, or any platform with a polaris bridge). The floor shows:
 
 - An interleaved, attributed log of all sessions' activity
 - Who said what, in which session (human and agent)
