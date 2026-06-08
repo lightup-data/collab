@@ -11,6 +11,7 @@ export interface Org {
   domain: string | null;
   slack_team_id: string | null;
   slack_bot_token: string | null;
+  slack_system_channel_id: string | null;
   created_at: string;
 }
 
@@ -35,6 +36,7 @@ export async function createDb(connectionString?: string): Promise<Sql> {
       domain TEXT,
       slack_team_id TEXT,
       slack_bot_token TEXT,
+      slack_system_channel_id TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
@@ -117,8 +119,8 @@ export async function getOrgByDomain(sql: Sql, domain: string): Promise<Org | nu
   return { ...row, created_at: row.created_at.toISOString() } as Org;
 }
 
-export async function setOrgSlack(sql: Sql, orgId: string, teamId: string, botToken: string): Promise<void> {
-  await sql`UPDATE orgs SET slack_team_id = ${teamId}, slack_bot_token = ${botToken} WHERE id = ${orgId}`;
+export async function setOrgSlack(sql: Sql, orgId: string, teamId: string, botToken: string, systemChannelId?: string): Promise<void> {
+  await sql`UPDATE orgs SET slack_team_id = ${teamId}, slack_bot_token = ${botToken}, slack_system_channel_id = ${systemChannelId ?? null} WHERE id = ${orgId}`;
 }
 
 // --- Users ---
