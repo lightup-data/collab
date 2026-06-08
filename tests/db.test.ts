@@ -2,6 +2,13 @@ import { describe, expect, test, beforeEach, afterAll } from "bun:test";
 import {
   createDb,
   createOrg,
+  getOrg,
+  getOrgByDomain,
+  setOrgSlack,
+  createUser,
+  getUser,
+  getUserByEmail,
+  upsertUser,
   createProject,
   getProject,
   createSession,
@@ -52,6 +59,81 @@ function makeEvent(overrides: Partial<PolarisEvent> = {}): PolarisEvent {
     ...overrides,
   };
 }
+
+describe("orgs", () => {
+  test("create and retrieve an org", async () => {
+    const org = await getOrg(sql, "test-org");
+    expect(org).not.toBeNull();
+    expect(org!.name).toBe("Test Org");
+    expect(org!.created_at).toBeDefined();
+  });
+
+  test("duplicate org id throws", async () => {
+    expect(createOrg(sql, "test-org", "Duplicate")).rejects.toThrow();
+  });
+
+  test("get nonexistent org returns null", async () => {
+    expect(await getOrg(sql, "nope")).toBeNull();
+  });
+
+  test("get org by domain", async () => {
+    await createOrg(sql, "domain-org", "Domain Org", "example.com");
+    const org = await getOrgByDomain(sql, "example.com");
+    expect(org).not.toBeNull();
+    expect(org!.id).toBe("domain-org");
+  });
+
+  test("get org by domain returns null for unknown domain", async () => {
+    expect(await getOrgByDomain(sql, "unknown.com")).toBeNull();
+  });
+
+  test("set org slack credentials", async () => {
+    await setOrgSlack(sql, "test-org", "T123", "xoxb-token");
+    const org = await getOrg(sql, "test-org");
+    expect(org!.slack_team_id).toBe("T123");
+    expect(org!.slack_bot_token).toBe("xoxb-token");
+  });
+});
+
+describe("users", () => {
+  test("create and retrieve a user", async () => {
+    const user = await createUser(sql, "u1", "manu@test.com", "Manu", "test-org", "user:manu");
+    expect(user.email).toBe("manu@test.com");
+    expect(user.org_id).toBe("test-org");
+    expect(user.participant_id).toBe("user:manu");
+
+    const retrieved = await getUser(sql, "u1");
+    expect(retrieved).not.toBeNull();
+    expect(retrieved!.name).toBe("Manu");
+  });
+
+  test("get user by email", async () => {
+    await createUser(sql, "u2", "krishna@test.com", "Krishna", "test-org", "user:krishna");
+    const user = await getUserByEmail(sql, "krishna@test.com");
+    expect(user).not.toBeNull();
+    expect(user!.id).toBe("u2");
+  });
+
+  test("get nonexistent user returns null", async () => {
+    expect(await getUser(sql, "nope")).toBeNull();
+    expect(await getUserByEmail(sql, "nope@test.com")).toBeNull();
+  });
+
+  test("duplicate email throws", async () => {
+    await createUser(sql, "u3", "dupe@test.com", "User A", "test-org", "user:a");
+    expect(createUser(sql, "u4", "dupe@test.com", "User B", "test-org", "user:b")).rejects.toThrow();
+  });
+
+  test("upsert user updates existing", async () => {
+    await createUser(sql, "u5", "upsert@test.com", "Old Name", "test-org", "user:old");
+    const updated = await upsertUser(sql, "u5-new", "upsert@test.com", "New Name", "test-org", "user:new");
+    expect(updated.name).toBe("New Name");
+    expect(updated.participant_id).toBe("user:new");
+
+    const fetched = await getUserByEmail(sql, "upsert@test.com");
+    expect(fetched!.name).toBe("New Name");
+  });
+});
 
 describe("projects", () => {
   test("create and retrieve a project", async () => {
