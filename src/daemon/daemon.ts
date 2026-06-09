@@ -267,7 +267,7 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
             if (connectedSessions.length === 1) {
               // Only one active session — route to it and remember the mapping
               mapping = connectedSessions[0];
-              sessions.set(ccSessionId, { ...mapping, ccSessionId });
+              sessions.set(ccSessionId, { ...mapping, ccSessionId, slackChannel: undefined });
             } else if (connectedSessions.length > 1) {
               // Multiple sessions — can't determine which one. Discard.
               return json({ status: "ambiguous" });
@@ -292,6 +292,23 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
             return new Response(err, { status: res.status });
           }
           return json({ status: "relayed" });
+        } catch {
+          return error("Invalid JSON", 400);
+        }
+      }
+
+      // POST /channel-update — bridge pushes channel rename notifications
+      if (method === "POST" && pathname === "/channel-update") {
+        try {
+          const body = (await req.json()) as { project: string; slackChannel: string };
+          if (!body.project || !body.slackChannel) return error("project and slackChannel required", 400);
+          // Update all sessions for this project
+          for (const m of sessions.values()) {
+            if (m.project === body.project) {
+              m.slackChannel = body.slackChannel;
+            }
+          }
+          return json({ status: "updated" });
         } catch {
           return error("Invalid JSON", 400);
         }

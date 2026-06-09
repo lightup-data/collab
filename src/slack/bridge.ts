@@ -268,13 +268,57 @@ export async function startBridge(opts: {
   socketMode.on("message", async ({ event, ack }: { event: Record<string, unknown>; ack: () => Promise<void> }) => {
     try {
       await ack();
-      const msg = event as { text?: string; user?: string; channel?: string; ts?: string; subtype?: string };
-      console.error(`[bridge] message: user=${msg.user} channel=${msg.channel} text=${msg.text?.slice(0, 80)}`);
+      const msg = event as { text?: string; user?: string; channel?: string; ts?: string; subtype?: string; name?: string };
+      console.error(`[bridge] message: user=${msg.user} channel=${msg.channel} subtype=${msg.subtype} text=${msg.text?.slice(0, 80)}`);
+
+      // Handle channel rename system messages
+      if (msg.subtype === "channel_name" && msg.channel && msg.name) {
+        console.error(`[bridge] channel renamed: ${msg.channel} → ${msg.name}`);
+        const projects = await listProjects(sql, opts.orgId);
+        for (const proj of projects) {
+          if (proj.slack_channel_id === msg.channel) {
+            channelCache.set(proj.name, msg.channel);
+            await setProjectSlackChannel(sql, opts.orgId, proj.name, msg.channel, msg.name);
+            // Notify local daemon so status line updates immediately
+            try {
+              await fetch(`http://127.0.0.1:${process.env.POLARIS_DAEMON_PORT ?? 4322}/channel-update`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ project: proj.name, slackChannel: msg.name }),
+              });
+            } catch { /* daemon may not be running */ }
+            console.error(`[bridge] Updated channel name for project ${proj.name}: ${msg.name}`);
+          }
+        }
+        return;
+      }
+
       if (msg.subtype || !msg.channel || !msg.text || !msg.user) return;
       if (msg.user === botUserId) return;
       await handleSlackMessage(web, sql, opts.orgId, botUserId, msg as { text: string; user: string; channel: string; ts: string });
     } catch (e) {
       console.error(`[bridge] message handler error:`, e);
+    }
+  });
+
+  // Listen for channel renames — update DB so status line stays current
+  socketMode.on("channel_rename", async ({ event, ack }: { event: Record<string, unknown>; ack: () => Promise<void> }) => {
+    try {
+      await ack();
+      const channel = event.channel as { id?: string; name?: string } | undefined;
+      if (!channel?.id || !channel?.name) return;
+      console.error(`[bridge] channel_rename: ${channel.id} → ${channel.name}`);
+      // Update in-memory cache and DB for any project using this channel
+      const projects = await listProjects(sql, opts.orgId);
+      for (const proj of projects) {
+        if (proj.slack_channel_id === channel.id) {
+          channelCache.set(proj.name, channel.id);
+          await setProjectSlackChannel(sql, opts.orgId, proj.name, channel.id, channel.name);
+          console.error(`[bridge] Updated channel name for project ${proj.name}: ${channel.name}`);
+        }
+      }
+    } catch (e) {
+      console.error(`[bridge] channel_rename handler error:`, e);
     }
   });
 
