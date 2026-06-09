@@ -2,82 +2,115 @@
 
 import type { PolarisEvent } from "../types";
 
+export interface SlackMessage {
+  text: string;
+  blocks?: Array<Record<string, unknown>>;
+  attachments?: Array<Record<string, unknown>>;
+  username?: string;
+  icon_emoji?: string;
+}
+
+// Derive a display name from a participant ID
+function displayName(participantId: string): string {
+  const [type, name] = participantId.split(":", 2);
+  if (!name) return participantId;
+  const pretty = name.replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  if (type === "agent") return `Agent: ${pretty}`;
+  return pretty;
+}
+
+function personaIcon(participantId: string): string {
+  if (participantId.startsWith("agent:")) return ":robot_face:";
+  if (participantId.startsWith("slack:")) return ":speech_balloon:";
+  return ":bust_in_silhouette:";
+}
+
 // Format a PolarisEvent into a Slack message.
 // Returns null if the event should be skipped (e.g., tool calls).
-export function formatEventForSlack(event: PolarisEvent): { text: string; blocks: Array<Record<string, unknown>> } | null {
+export function formatEventForSlack(event: PolarisEvent): SlackMessage | null {
   const payload = event.payload;
 
-  // Hook events
   if ("hook_event_name" in payload) {
     switch (payload.hook_event_name) {
-      case "UserPromptSubmit": {
-        const sender = event.sender;
-        const session = event.session;
-        return slackMessage(
-          `*${sender}* → _${session}_`,
-          payload.prompt,
-        );
-      }
+      case "UserPromptSubmit":
+        return formatUserPrompt(event.sender, event.session, payload.prompt);
       case "Stop": {
-        const session = event.session;
         const response = payload.stop_response || payload.last_assistant_message;
         if (!response) return null;
-        return slackMessage(
-          `_agent_ → *${event.sender}/${session}*`,
-          response,
-        );
+        return formatAgentResponse(event.session, response);
       }
       case "PreToolUse":
       case "PostToolUse":
-        // Skip tool calls to reduce noise
         return null;
     }
   }
 
-  // Inject events (advisor messages)
   if ("type" in payload && payload.type === "inject") {
-    return slackMessage(
-      `*${event.sender}* → _${(payload as { target: string }).target}_`,
+    return formatAdvisorMessage(
+      event.sender,
+      (payload as { target: string }).target,
       (payload as { content: string }).content,
     );
   }
 
-  // Reply events
   if ("type" in payload && payload.type === "reply") {
-    return slackMessage(
-      `*${event.sender}* replied`,
-      (payload as { content: string }).content,
-    );
+    const body = (payload as { content: string }).content;
+    if (!body) return null;
+    return {
+      text: toMrkdwn(body),
+      blocks: [{ type: "section", text: { type: "mrkdwn", text: toMrkdwn(body) } }],
+      username: displayName(event.sender),
+      icon_emoji: personaIcon(event.sender),
+    };
   }
 
   return null;
 }
 
-function slackMessage(header: string, body: string): { text: string; blocks: Array<Record<string, unknown>> } | null {
-  if (!body) return null;
-  // Truncate long messages
-  const maxLen = 2000;
-  const truncated = body.length > maxLen ? body.slice(0, maxLen) + "..." : body;
+// --- User prompt ---
 
-  // Convert markdown bold/italic to Slack mrkdwn (mostly compatible)
-  const mrkdwn = truncated
-    .replace(/```(\w*)\n([\s\S]*?)```/g, "```$2```") // code blocks (strip language)
-    .replace(/\*\*(.*?)\*\*/g, "*$1*")                // bold: ** → *
-    .replace(/__(.*?)__/g, "*$1*");                   // bold: __ → *
-
-  const text = `${header}\n${mrkdwn}`;
-
+function formatUserPrompt(sender: string, session: string, prompt: string): SlackMessage | null {
+  if (!prompt) return null;
   return {
-    text,
-    blocks: [
-      {
-        type: "context",
-        elements: [{ type: "mrkdwn", text: header }],
-      },
-      {
-        type: "section",
-        text: { type: "mrkdwn", text: mrkdwn },
-      },
-    ],
+    text: toMrkdwn(prompt),
+    blocks: [{ type: "section", text: { type: "mrkdwn", text: toMrkdwn(prompt) } }],
+    username: `${displayName(sender)} (${session})`,
+    icon_emoji: personaIcon(sender),
   };
+}
+
+// --- Agent response ---
+
+function formatAgentResponse(session: string, response: string): SlackMessage | null {
+  if (!response) return null;
+  return {
+    text: toMrkdwn(response),
+    blocks: [{ type: "section", text: { type: "mrkdwn", text: toMrkdwn(response) } }],
+    username: `Agent (${session})`,
+    icon_emoji: ":robot_face:",
+  };
+}
+
+// --- Advisor message ---
+
+function formatAdvisorMessage(sender: string, target: string, content: string): SlackMessage | null {
+  if (!content) return null;
+  const body = toMrkdwn(content);
+  return {
+    text: body,
+    blocks: [{ type: "section", text: { type: "mrkdwn", text: `→ _${target}_:  ${body}` } }],
+    username: displayName(sender),
+    icon_emoji: personaIcon(sender),
+  };
+}
+
+// --- Markdown → Slack mrkdwn ---
+
+function toMrkdwn(text: string): string {
+  const maxLen = 2000;
+  const truncated = text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
+  return truncated
+    .replace(/```(\w*)\n([\s\S]*?)```/g, "```$2```")
+    .replace(/\*\*(.*?)\*\*/g, "*$1*")
+    .replace(/__(.*?)__/g, "*$1*");
 }

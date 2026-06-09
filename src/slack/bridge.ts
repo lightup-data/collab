@@ -76,7 +76,9 @@ async function postEventToSlack(web: WebClient, event: PolarisEvent): Promise<vo
     await web.chat.postMessage({
       channel: channelId,
       text: msg.text,
-      blocks: msg.blocks,
+      ...(msg.blocks ? { blocks: msg.blocks } : {}),
+      ...(msg.username ? { username: msg.username } : {}),
+      ...(msg.icon_emoji ? { icon_emoji: msg.icon_emoji } : {}),
     });
   } catch (e) {
     console.error(`[bridge] Failed to post to Slack for project ${event.project}:`, e);

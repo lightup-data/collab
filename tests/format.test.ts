@@ -20,119 +20,84 @@ function makeEvent(overrides: Partial<PolarisEvent> = {}): PolarisEvent {
 }
 
 describe("formatEventForSlack", () => {
-  test("formats UserPromptSubmit", () => {
+  test("user prompt: persona with session, plain message", () => {
     const result = formatEventForSlack(makeEvent());
     expect(result).not.toBeNull();
-    expect(result!.text).toContain("user:manu");
-    expect(result!.text).toContain("fxm");
+    expect(result!.username).toBe("Manu (fxm)");
+    expect(result!.icon_emoji).toBe(":bust_in_silhouette:");
     expect(result!.text).toContain("build auth middleware");
-    expect(result!.blocks).toHaveLength(2);
+    expect(result!.blocks).toHaveLength(1);
   });
 
-  test("formats Stop", () => {
+  test("agent response: robot persona with session", () => {
     const result = formatEventForSlack(makeEvent({
-      payload: {
-        hook_event_name: "Stop",
-        session_id: "s1",
-        stop_response: "Created src/middleware/auth.ts",
-      },
+      payload: { hook_event_name: "Stop", session_id: "s1", stop_response: "Created auth.ts" },
     }));
     expect(result).not.toBeNull();
-    expect(result!.text).toContain("agent");
-    expect(result!.text).toContain("Created src/middleware/auth.ts");
+    expect(result!.username).toBe("Agent (fxm)");
+    expect(result!.icon_emoji).toBe(":robot_face:");
+    expect(result!.text).toContain("Created auth.ts");
   });
 
   test("skips PreToolUse", () => {
-    const result = formatEventForSlack(makeEvent({
-      payload: {
-        hook_event_name: "PreToolUse",
-        session_id: "s1",
-        tool_name: "Bash",
-        tool_input: { command: "ls" },
-      },
-    }));
-    expect(result).toBeNull();
+    expect(formatEventForSlack(makeEvent({
+      payload: { hook_event_name: "PreToolUse", session_id: "s1", tool_name: "Bash", tool_input: { command: "ls" } },
+    }))).toBeNull();
   });
 
   test("skips PostToolUse", () => {
-    const result = formatEventForSlack(makeEvent({
-      payload: {
-        hook_event_name: "PostToolUse",
-        session_id: "s1",
-        tool_name: "Read",
-        tool_input: { file_path: "/tmp/test" },
-        tool_result: { content: [{ type: "text", text: "file" }] },
-      },
-    }));
-    expect(result).toBeNull();
+    expect(formatEventForSlack(makeEvent({
+      payload: { hook_event_name: "PostToolUse", session_id: "s1", tool_name: "Read", tool_input: { file_path: "/tmp" }, tool_result: {} },
+    }))).toBeNull();
   });
 
-  test("formats inject message", () => {
+  test("advisor: persona + target in message", () => {
     const result = formatEventForSlack(makeEvent({
       source: "inject",
       sender: "user:krishna",
-      payload: {
-        type: "inject" as const,
-        content: "Use RS256 for the JWT",
-        sender: "user:krishna",
-        target: "fxm",
-      },
+      payload: { type: "inject" as const, content: "Use RS256", sender: "user:krishna", target: "fxm" },
     }));
     expect(result).not.toBeNull();
-    expect(result!.text).toContain("user:krishna");
-    expect(result!.text).toContain("fxm");
+    expect(result!.username).toBe("Krishna");
     expect(result!.text).toContain("Use RS256");
   });
 
-  test("formats reply message", () => {
+  test("reply: persona", () => {
     const result = formatEventForSlack(makeEvent({
       source: "reply",
       sender: "user:manu",
-      payload: {
-        type: "reply" as const,
-        content: "Done, switched to RS256",
-        sender: "user:manu",
-      },
+      payload: { type: "reply" as const, content: "Done", sender: "user:manu" },
     }));
     expect(result).not.toBeNull();
-    expect(result!.text).toContain("replied");
-    expect(result!.text).toContain("Done, switched to RS256");
+    expect(result!.username).toBe("Manu");
+    expect(result!.text).toContain("Done");
   });
 
   test("truncates long messages", () => {
-    const longText = "x".repeat(3000);
     const result = formatEventForSlack(makeEvent({
-      payload: {
-        hook_event_name: "UserPromptSubmit",
-        session_id: "s1",
-        prompt: longText,
-      },
+      payload: { hook_event_name: "Stop", session_id: "s1", stop_response: "x".repeat(3000) },
     }));
     expect(result).not.toBeNull();
-    expect(result!.blocks[1].text).toBeDefined();
-    const bodyText = (result!.blocks[1].text as { text: string }).text;
-    expect(bodyText.length).toBeLessThan(2100);
-    expect(bodyText).toContain("...");
+    expect(result!.text!.length).toBeLessThan(2100);
+    expect(result!.text).toContain("...");
   });
 
   test("converts markdown bold to mrkdwn", () => {
     const result = formatEventForSlack(makeEvent({
-      payload: {
-        hook_event_name: "UserPromptSubmit",
-        session_id: "s1",
-        prompt: "This is **bold** text",
-      },
+      payload: { hook_event_name: "Stop", session_id: "s1", stop_response: "This is **bold** text" },
     }));
     expect(result).not.toBeNull();
-    const bodyText = (result!.blocks[1].text as { text: string }).text;
-    expect(bodyText).toContain("*bold*");
-    expect(bodyText).not.toContain("**bold**");
+    expect(result!.text).toContain("*bold*");
+    expect(result!.text).not.toContain("**bold**");
   });
 
-  test("skips _system events", () => {
-    const result = formatEventForSlack(makeEvent({ project: "_system", session: "_system" }));
-    // _system filtering is done in the bridge, not the formatter
-    // The formatter should still format it
+  test("agent: sender persona for agent participants", () => {
+    const result = formatEventForSlack(makeEvent({
+      sender: "agent:test-writer",
+      payload: { hook_event_name: "UserPromptSubmit", session_id: "s1", prompt: "write tests" },
+    }));
     expect(result).not.toBeNull();
+    expect(result!.username).toBe("Agent: Test Writer (fxm)");
+    expect(result!.icon_emoji).toBe(":robot_face:");
   });
 });
