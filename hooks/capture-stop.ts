@@ -1,6 +1,10 @@
 #!/usr/bin/env bun
-// hooks/capture-stop.ts — Extract the last assistant message from the transcript
-// and POST it to the daemon as a Stop event with the full response.
+// hooks/capture-stop.ts — Extract the full assistant turn from the transcript
+// and POST it to the daemon as a Stop event with the complete response.
+//
+// A single Claude turn can span multiple assistant entries in the transcript
+// (text → tool_use → tool_result → text → tool_use → ...). We collect ALL
+// assistant text parts since the last user message.
 
 const POLARIS_PORT = process.env.POLARIS_PORT ?? "4322";
 const POLARIS_URL = `http://127.0.0.1:${POLARIS_PORT}/events`;
@@ -18,7 +22,7 @@ try {
     process.exit(0);
   }
 
-  // Read the transcript to get the full last assistant message
+  // Read the transcript to get the full assistant turn
   const transcriptPath = input.transcript_path;
   let fullResponse = input.last_assistant_message ?? "";
 
@@ -28,25 +32,57 @@ try {
       const text = await file.text();
       const lines = text.trim().split("\n");
 
-      // Find the last assistant message (walk backwards)
+      // Walk backwards to find the last user message, then collect all
+      // assistant text parts between that user message and the end.
+      let userIdx = -1;
       for (let i = lines.length - 1; i >= 0; i--) {
         try {
           const entry = JSON.parse(lines[i]);
-          if (entry.type === "assistant" && entry.message?.content) {
-            // Extract all text parts, skip tool_use parts
-            const textParts = entry.message.content
-              .filter((c: { type: string }) => c.type === "text")
-              .map((c: { text: string }) => c.text)
-              .filter(Boolean);
+          if ((entry.type === "user" || entry.type === "human") && typeof entry.message?.content === "string") {
+            userIdx = i;
+            break;
+          }
+        } catch {}
+      }
 
-            if (textParts.length > 0) {
-              fullResponse = textParts.join("\n\n");
-              break;
+      // Collect everything since the last user message:
+      // 1. rawTurn: full structured data for zero-loss DB logging
+      // 2. displayResponse: formatted text for Slack display
+      const rawTurn: unknown[] = [];
+      const displayParts: string[] = [];
+      const startIdx = userIdx >= 0 ? userIdx + 1 : 0;
+
+      for (let i = startIdx; i < lines.length; i++) {
+        try {
+          const entry = JSON.parse(lines[i]);
+          // Capture raw entries for full fidelity
+          if (entry.type === "assistant" || (entry.type === "user" && Array.isArray(entry.message?.content))) {
+            rawTurn.push(entry);
+          }
+          // Build display text
+          if (entry.type === "assistant" && entry.message?.content) {
+            for (const c of entry.message.content) {
+              if (c.type === "text" && c.text) {
+                displayParts.push(c.text);
+              } else if (c.type === "tool_use" && c.name) {
+                const inputSummary = c.input?.command?.slice(0, 80)
+                  ?? c.input?.file_path?.slice(0, 80)
+                  ?? c.input?.pattern?.slice(0, 80)
+                  ?? "";
+                displayParts.push(`> _\`${c.name}\`${inputSummary ? ": " + inputSummary : ""}_`);
+              }
             }
           }
-        } catch {
-          // Skip malformed lines
-        }
+        } catch {}
+      }
+
+      if (displayParts.length > 0) {
+        fullResponse = displayParts.join("\n\n");
+      }
+
+      // Attach raw turn data to the payload for zero-loss storage
+      if (rawTurn.length > 0) {
+        (input as Record<string, unknown>).raw_turn = rawTurn;
       }
     } catch {
       // Fall back to last_assistant_message
