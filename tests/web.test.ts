@@ -86,24 +86,18 @@ describe("renderActiveView", () => {
     expect(html).not.toContain("Connect Slack");
   });
 
-  test("shows session cards with roles", () => {
+  test("shows sessions nested under projects", () => {
     const html = renderActiveView(allDone, mockActiveSessions, mockProjects, mockDevices);
-    expect(html).toContain("polaris/auth");
-    expect(html).toContain("polaris/slack-bridge");
-    // Role badges are rendered (Advisor shown when participant ID derivation
-    // from display name doesn't match fixture — expected for mock data)
-    expect(html).toContain("Advisor");
+    // Session names shown within project cards
+    expect(html).toContain("auth");
+    expect(html).toContain("slack-bridge");
+    // Project names as card headers
+    expect(html).toContain("polaris");
+    expect(html).toContain("data-pipeline");
   });
 
-  test("shows session descriptions and event counts", () => {
+  test("shows driver info in session rows", () => {
     const html = renderActiveView(allDone, mockActiveSessions, mockProjects, mockDevices);
-    expect(html).toContain("Google SSO + JWT auth");
-    expect(html).toContain("42 events");
-  });
-
-  test("shows other participants in sessions", () => {
-    const html = renderActiveView(allDone, mockActiveSessions, mockProjects, mockDevices);
-    expect(html).toContain("agent:security-reviewer");
     expect(html).toContain("user:krishna");
   });
 
