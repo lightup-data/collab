@@ -69,13 +69,16 @@ function renderFloorSection(ctx: ViewContext, compact = false, state: StepState 
       : '';
     return `
       <div>
-        ${sectionHeader("Floor")}
+        <div class="flex items-baseline gap-2 mb-3">
+          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Floor</h2>
+          ${statusBadge("Connected", true)}
+        </div>
         <div class="bg-white border border-gray-200 rounded-lg px-5 py-3 flex items-center gap-3">
           <div class="w-8 h-8 rounded-lg bg-[#4A154B] flex items-center justify-center shrink-0">
             ${slackIcon.replace('class="w-4 h-4"', 'class="w-4 h-4 text-white"')}
           </div>
           <p class="text-sm font-medium text-gray-900">Slack</p>
-          ${statusBadge("Live", true)}
+          ${ctx.orgSlug ? `<span class="text-xs text-gray-400 font-mono">${ctx.orgSlug}</span>` : ''}
           ${promptStat}
         </div>
       </div>`;

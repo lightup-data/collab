@@ -81,7 +81,7 @@ describe("renderSetupView", () => {
 describe("renderActiveView", () => {
   test("shows compact floor bar", () => {
     const html = renderActiveView(allDone, mockActiveSessions, mockProjects, mockDevices);
-    expect(html).toContain("Live");
+    expect(html).toContain("Connected");
     // No Connect Slack button
     expect(html).not.toContain("Connect Slack");
   });
