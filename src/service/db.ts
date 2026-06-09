@@ -8,6 +8,7 @@ export type Sql = postgres.Sql;
 export interface Org {
   id: string;
   name: string;
+  slug: string | null;
   domain: string | null;
   slack_team_id: string | null;
   slack_bot_token: string | null;
@@ -33,6 +34,7 @@ export async function createDb(connectionString?: string): Promise<Sql> {
     CREATE TABLE IF NOT EXISTS orgs (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      slug TEXT UNIQUE,
       domain TEXT,
       slack_team_id TEXT,
       slack_bot_token TEXT,
@@ -119,8 +121,18 @@ export async function getOrgByDomain(sql: Sql, domain: string): Promise<Org | nu
   return { ...row, created_at: row.created_at.toISOString() } as Org;
 }
 
-export async function setOrgSlack(sql: Sql, orgId: string, teamId: string, botToken: string, systemChannelId?: string): Promise<void> {
-  await sql`UPDATE orgs SET slack_team_id = ${teamId}, slack_bot_token = ${botToken}, slack_system_channel_id = ${systemChannelId ?? null} WHERE id = ${orgId}`;
+export async function setOrgSlack(sql: Sql, orgId: string, teamId: string, botToken: string, systemChannelId?: string, slug?: string): Promise<void> {
+  if (slug) {
+    await sql`UPDATE orgs SET slack_team_id = ${teamId}, slack_bot_token = ${botToken}, slack_system_channel_id = ${systemChannelId ?? null}, slug = ${slug} WHERE id = ${orgId}`;
+  } else {
+    await sql`UPDATE orgs SET slack_team_id = ${teamId}, slack_bot_token = ${botToken}, slack_system_channel_id = ${systemChannelId ?? null} WHERE id = ${orgId}`;
+  }
+}
+
+export async function getOrgBySlug(sql: Sql, slug: string): Promise<Org | null> {
+  const [row] = await sql`SELECT * FROM orgs WHERE slug = ${slug}`;
+  if (!row) return null;
+  return { ...row, created_at: row.created_at.toISOString() } as Org;
 }
 
 // --- Users ---
