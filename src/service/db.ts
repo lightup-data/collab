@@ -283,6 +283,14 @@ export async function getSessionEvents(sql: Sql, orgId: string, project: string,
   return rows.map(rowToEvent);
 }
 
+export async function getOrgEventsSince(sql: Sql, orgId: string, since: string): Promise<PolarisEvent[]> {
+  const rows = await sql`
+    SELECT id, project, session, timestamp, source, sender, payload
+    FROM events WHERE org_id = ${orgId} AND timestamp > ${since} ORDER BY timestamp ASC
+  `;
+  return rows.map(rowToEvent);
+}
+
 export async function getEventsSince(sql: Sql, orgId: string, project: string, since: string): Promise<PolarisEvent[]> {
   const rows = await sql`
     SELECT id, project, session, timestamp, source, sender, payload
