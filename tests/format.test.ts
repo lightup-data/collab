@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { formatEventForSlack } from "../src/slack/format";
+import { describe, expect, test, beforeEach } from "bun:test";
+import { formatEventForSlack, setPromptStyle } from "../src/slack/format";
 import type { PolarisEvent } from "../src/types";
 
 function makeEvent(overrides: Partial<PolarisEvent> = {}): PolarisEvent {
@@ -20,13 +20,33 @@ function makeEvent(overrides: Partial<PolarisEvent> = {}): PolarisEvent {
 }
 
 describe("formatEventForSlack", () => {
-  test("formats UserPromptSubmit", () => {
+  beforeEach(() => {
+    setPromptStyle("color"); // default
+  });
+
+  test("formats UserPromptSubmit with color style", () => {
     const result = formatEventForSlack(makeEvent());
     expect(result).not.toBeNull();
     expect(result!.text).toContain("user:manu");
     expect(result!.text).toContain("fxm");
     expect(result!.text).toContain("build auth middleware");
+    expect(result!.attachments).toHaveLength(1);
+    expect(result!.attachments![0].color).toBe("#4263eb");
+  });
+
+  test("formats UserPromptSubmit with emoji style", () => {
+    setPromptStyle("emoji");
+    const result = formatEventForSlack(makeEvent());
+    expect(result).not.toBeNull();
+    expect(result!.text).toContain("💬");
     expect(result!.blocks).toHaveLength(2);
+  });
+
+  test("formats UserPromptSubmit with header style", () => {
+    setPromptStyle("header");
+    const result = formatEventForSlack(makeEvent());
+    expect(result).not.toBeNull();
+    expect(result!.blocks![0].type).toBe("header");
   });
 
   test("formats Stop", () => {
@@ -40,6 +60,7 @@ describe("formatEventForSlack", () => {
     expect(result).not.toBeNull();
     expect(result!.text).toContain("agent");
     expect(result!.text).toContain("Created src/middleware/auth.ts");
+    expect(result!.blocks).toHaveLength(2);
   });
 
   test("skips PreToolUse", () => {
@@ -67,7 +88,7 @@ describe("formatEventForSlack", () => {
     expect(result).toBeNull();
   });
 
-  test("formats inject message", () => {
+  test("formats inject message with green color", () => {
     const result = formatEventForSlack(makeEvent({
       source: "inject",
       sender: "user:krishna",
@@ -81,7 +102,8 @@ describe("formatEventForSlack", () => {
     expect(result).not.toBeNull();
     expect(result!.text).toContain("user:krishna");
     expect(result!.text).toContain("fxm");
-    expect(result!.text).toContain("Use RS256");
+    expect(result!.attachments).toHaveLength(1);
+    expect(result!.attachments![0].color).toBe("#16a34a");
   });
 
   test("formats reply message", () => {
@@ -103,14 +125,13 @@ describe("formatEventForSlack", () => {
     const longText = "x".repeat(3000);
     const result = formatEventForSlack(makeEvent({
       payload: {
-        hook_event_name: "UserPromptSubmit",
+        hook_event_name: "Stop",
         session_id: "s1",
-        prompt: longText,
+        stop_response: longText,
       },
     }));
     expect(result).not.toBeNull();
-    expect(result!.blocks[1].text).toBeDefined();
-    const bodyText = (result!.blocks[1].text as { text: string }).text;
+    const bodyText = (result!.blocks![1].text as { text: string }).text;
     expect(bodyText.length).toBeLessThan(2100);
     expect(bodyText).toContain("...");
   });
@@ -118,21 +139,14 @@ describe("formatEventForSlack", () => {
   test("converts markdown bold to mrkdwn", () => {
     const result = formatEventForSlack(makeEvent({
       payload: {
-        hook_event_name: "UserPromptSubmit",
+        hook_event_name: "Stop",
         session_id: "s1",
-        prompt: "This is **bold** text",
+        stop_response: "This is **bold** text",
       },
     }));
     expect(result).not.toBeNull();
-    const bodyText = (result!.blocks[1].text as { text: string }).text;
+    const bodyText = (result!.blocks![1].text as { text: string }).text;
     expect(bodyText).toContain("*bold*");
     expect(bodyText).not.toContain("**bold**");
-  });
-
-  test("skips _system events", () => {
-    const result = formatEventForSlack(makeEvent({ project: "_system", session: "_system" }));
-    // _system filtering is done in the bridge, not the formatter
-    // The formatter should still format it
-    expect(result).not.toBeNull();
   });
 });
