@@ -73,13 +73,13 @@ describe("formatEventForSlack", () => {
     expect(result!.text).toContain("Done");
   });
 
-  test("truncates long messages", () => {
+  test("long messages include full text for bridge threading", () => {
     const result = formatEventForSlack(makeEvent({
-      payload: { hook_event_name: "Stop", session_id: "s1", stop_response: "x".repeat(3000) },
+      payload: { hook_event_name: "Stop", session_id: "s1", stop_response: "x".repeat(5000) },
     }));
     expect(result).not.toBeNull();
-    expect(result!.text!.length).toBeLessThan(2100);
-    expect(result!.text).toContain("...");
+    expect(result!.text!.length).toBe(5000);
+    expect(result!.blocks).toBeDefined();
   });
 
   test("converts markdown bold to mrkdwn", () => {

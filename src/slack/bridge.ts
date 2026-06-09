@@ -8,7 +8,7 @@
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
 import { createDb, getOrg, listProjects, getProjectEvents, getOrgEventsSince, getSession, createSession, pushEvent, setProjectSlackChannel, type Sql, type Org } from "../service/db";
-import { formatEventForSlack } from "./format";
+import { formatEventForSlack, toMrkdwn, THREAD_THRESHOLD } from "./format";
 import type { PolarisEvent } from "../types";
 
 // --- Channel management ---
@@ -97,13 +97,41 @@ async function postEventToSlack(web: WebClient, sql: Sql, orgId: string, event: 
 
   try {
     const channelId = await getOrCreateChannel(web, sql, orgId, event.project);
-    await web.chat.postMessage({
-      channel: channelId,
-      text: msg.text,
-      ...(msg.blocks ? { blocks: msg.blocks } : {}),
-      ...(msg.username ? { username: msg.username } : {}),
-      ...(msg.icon_emoji ? { icon_emoji: msg.icon_emoji } : {}),
-    });
+    const isLong = msg.text.length > THREAD_THRESHOLD;
+    // POLARIS_LONG_MSG controls how messages longer than THREAD_THRESHOLD are posted:
+    //   "thread"  (default) — 500-char preview in channel, full content in a thread reply
+    //   "inline"  — post the full message directly in the channel (may be very long)
+    const longMode = process.env.POLARIS_LONG_MSG ?? "thread";
+
+    if (!isLong || longMode === "inline") {
+      await web.chat.postMessage({
+        channel: channelId,
+        text: msg.text,
+        ...(msg.blocks ? { blocks: msg.blocks } : {}),
+        ...(msg.username ? { username: msg.username } : {}),
+        ...(msg.icon_emoji ? { icon_emoji: msg.icon_emoji } : {}),
+      });
+    } else {
+      // summary + thread
+      const preview = msg.text.slice(0, 500).trimEnd();
+      const summaryText = `${preview}...\n\n_Full response in thread_ :thread:`;
+      const summary = await web.chat.postMessage({
+        channel: channelId,
+        text: summaryText,
+        blocks: [{ type: "section", text: { type: "mrkdwn", text: summaryText } }],
+        ...(msg.username ? { username: msg.username } : {}),
+        ...(msg.icon_emoji ? { icon_emoji: msg.icon_emoji } : {}),
+      });
+      if (summary.ok && summary.ts) {
+        await web.chat.postMessage({
+          channel: channelId,
+          thread_ts: summary.ts,
+          text: msg.text,
+          ...(msg.username ? { username: msg.username } : {}),
+          ...(msg.icon_emoji ? { icon_emoji: msg.icon_emoji } : {}),
+        });
+      }
+    }
   } catch (e) {
     console.error(`[bridge] Failed to post to Slack for project ${event.project}:`, e);
   }
