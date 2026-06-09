@@ -301,27 +301,6 @@ export async function startBridge(opts: {
     }
   });
 
-  // Listen for channel renames — update DB so status line stays current
-  socketMode.on("channel_rename", async ({ event, ack }: { event: Record<string, unknown>; ack: () => Promise<void> }) => {
-    try {
-      await ack();
-      const channel = event.channel as { id?: string; name?: string } | undefined;
-      if (!channel?.id || !channel?.name) return;
-      console.error(`[bridge] channel_rename: ${channel.id} → ${channel.name}`);
-      // Update in-memory cache and DB for any project using this channel
-      const projects = await listProjects(sql, opts.orgId);
-      for (const proj of projects) {
-        if (proj.slack_channel_id === channel.id) {
-          channelCache.set(proj.name, channel.id);
-          await setProjectSlackChannel(sql, opts.orgId, proj.name, channel.id, channel.name);
-          console.error(`[bridge] Updated channel name for project ${proj.name}: ${channel.name}`);
-        }
-      }
-    } catch (e) {
-      console.error(`[bridge] channel_rename handler error:`, e);
-    }
-  });
-
   // Poll for new events directly from DB (bridge runs server-side)
   const postedEventIds = new Set<string>();
   let lastPollTime = new Date().toISOString();
