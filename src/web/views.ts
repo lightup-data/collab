@@ -65,7 +65,7 @@ function sectionWrap(state: StepState, content: string): string {
 function renderFloorSection(ctx: ViewContext, compact = false, state: StepState = "done"): string {
   if (compact && ctx.slackConnected) {
     const promptStat = ctx.totalPrompts > 0
-      ? `<span class="text-xs text-gray-400 ml-auto">${ctx.totalPrompts} prompt${ctx.totalPrompts !== 1 ? "s" : ""} logged</span>`
+      ? `<span class="text-xs text-gray-400 ml-auto">${ctx.totalPrompts} prompt${ctx.totalPrompts !== 1 ? "s" : ""}</span>`
       : '';
     return `
       <div>
