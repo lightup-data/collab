@@ -257,10 +257,10 @@ export function createApp(sql: Sql) {
     const mockToken = "preview-token";
     const base = { token: mockToken, userName: mockUser.name, orgName: mockOrg.name, orgSlug: "lightup-data" as string | null, email: mockUser.email };
 
-    const fresh       = { ...base, orgSlug: null, slackConnected: false, cliInstalled: false, hasConnectedSession: false };
-    const slackDone   = { ...base, slackConnected: true,  cliInstalled: false, hasConnectedSession: false };
-    const cliDone     = { ...base, slackConnected: true,  cliInstalled: true,  hasConnectedSession: false };
-    const allDone     = { ...base, slackConnected: true,  cliInstalled: true,  hasConnectedSession: true };
+    const fresh       = { ...base, orgSlug: null, slackConnected: false, cliInstalled: false, hasConnectedSession: false, totalPrompts: 0 };
+    const slackDone   = { ...base, slackConnected: true,  cliInstalled: false, hasConnectedSession: false, totalPrompts: 0 };
+    const cliDone     = { ...base, slackConnected: true,  cliInstalled: true,  hasConnectedSession: false, totalPrompts: 0 };
+    const allDone     = { ...base, slackConnected: true,  cliInstalled: true,  hasConnectedSession: true,  totalPrompts: 127 };
 
     return layout(`
       <div class="max-w-5xl mx-auto px-6 py-12">
