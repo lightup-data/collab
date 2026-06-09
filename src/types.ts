@@ -30,6 +30,7 @@ export const StopPayload = HookCommon.extend({
   stop_response: z.string().optional(),
   last_assistant_message: z.string().optional(),
   stop_hook_active: z.boolean().optional(),
+  raw_turn: z.array(z.unknown()).optional(),
 });
 
 export const PreToolUsePayload = HookCommon.extend({
