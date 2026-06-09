@@ -304,12 +304,22 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
         if (!mapping || !mapping.project) {
           return json({ connected: false });
         }
+        // Resolve slackChannel from any session in the same project
+        let slackChannel = mapping.slackChannel ?? null;
+        if (!slackChannel) {
+          for (const m of sessions.values()) {
+            if (m.project === mapping.project && m.slackChannel) {
+              slackChannel = m.slackChannel;
+              break;
+            }
+          }
+        }
         return json({
           connected: true,
           project: mapping.project,
           session: mapping.session,
           user: mapping.user,
-          slackChannel: mapping.slackChannel ?? null,
+          slackChannel,
         });
       }
 
