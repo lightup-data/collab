@@ -13,12 +13,12 @@ import { createApp } from "../src/web/app";
 import { createDb, createOrg, createUser, type Sql } from "../src/service/db";
 import { createToken } from "../src/service/auth";
 
-const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://polaris:polaris@localhost:5432/polaris";
+const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://polaris:polaris@localhost:5432/polaris_test";
 
 // --- View context helpers ---
 
-const base = { token: "test-token", userName: "Manu Bansal", orgName: "Lightup", email: "manu@lightup.ai" };
-const fresh = { ...base, slackConnected: false, cliInstalled: false, hasConnectedSession: false };
+const base = { token: "test-token", userName: "Manu Bansal", orgName: "Lightup", orgSlug: "lightup-data" as string | null, email: "manu@lightup.ai" };
+const fresh = { ...base, orgSlug: null, slackConnected: false, cliInstalled: false, hasConnectedSession: false };
 const slackDone = { ...base, slackConnected: true, cliInstalled: false, hasConnectedSession: false };
 const cliDone = { ...base, slackConnected: true, cliInstalled: true, hasConnectedSession: false };
 const allDone = { ...base, slackConnected: true, cliInstalled: true, hasConnectedSession: true };
@@ -35,7 +35,7 @@ describe("renderSetupView", () => {
     // Connect Slack button is present
     expect(html).toContain("Connect Slack");
     // Install CLI command is present
-    expect(html).toContain("npx @lightup/polaris login");
+    expect(html).toContain("npx @lightupai/polaris login");
     // Connect session command is present
     expect(html).toContain("/polaris join my-project my-session");
   });
@@ -52,15 +52,14 @@ describe("renderSetupView", () => {
     const highlightIdx = html.indexOf("border-polaris-300");
     expect(highlightIdx).toBeGreaterThan(devicesIdx);
     // Install CLI command present
-    expect(html).toContain("npx @lightup/polaris login");
+    expect(html).toContain("npx @lightupai/polaris login");
   });
 
   test("cli done: floor and devices done, sessions is highlighted", () => {
     const html = renderSetupView(cliDone, mockDevices);
-    // Device list is shown (not install prompt)
+    // Device list is shown with "add another" tray
     expect(html).toContain("Manu's MacBook Pro");
-    // No install CLI command
-    expect(html).not.toContain("npx @lightup/polaris login");
+    expect(html).toContain("Add another device");
     // Session section has highlight
     const sessIdx = html.indexOf("Projects &amp; Sessions");
     const lastHighlight = html.lastIndexOf("border-polaris-300");
@@ -119,9 +118,9 @@ describe("renderActiveView", () => {
     const html = renderActiveView(allDone, mockActiveSessions, mockProjects, mockDevices);
     expect(html).toContain("Manu's MacBook Pro");
     expect(html).toContain("Manu's iMac");
-    expect(html).toContain("Active now");
+    expect(html).toContain("Online");
     expect(html).toContain("polaris/auth");
-    expect(html).toContain("Last seen");
+    expect(html).toContain("Offline");
   });
 
   test("hides devices section when no devices", () => {
@@ -269,7 +268,7 @@ describe("routes", () => {
     await sql`DROP TABLE IF EXISTS projects`;
     await sql`DROP TABLE IF EXISTS users`;
     await sql`DROP TABLE IF EXISTS orgs`;
-    await sql`CREATE TABLE IF NOT EXISTS orgs (id TEXT PRIMARY KEY, name TEXT NOT NULL, domain TEXT, slack_team_id TEXT, slack_bot_token TEXT, slack_system_channel_id TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
+    await sql`CREATE TABLE IF NOT EXISTS orgs (id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT UNIQUE, domain TEXT, slack_team_id TEXT, slack_bot_token TEXT, slack_system_channel_id TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
     await sql`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, org_id TEXT NOT NULL REFERENCES orgs(id), participant_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
     await sql`CREATE TABLE IF NOT EXISTS projects (name TEXT NOT NULL, org_id TEXT NOT NULL REFERENCES orgs(id), created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (org_id, name))`;
     await sql`CREATE TABLE IF NOT EXISTS sessions (name TEXT NOT NULL, project TEXT NOT NULL, org_id TEXT NOT NULL, driver TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (org_id, project, name), FOREIGN KEY (org_id, project) REFERENCES projects(org_id, name))`;

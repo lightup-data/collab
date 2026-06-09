@@ -63,7 +63,8 @@ async function login() {
   // 2. Wait for the token
   console.log("Waiting for authentication...");
   const token = await tokenPromise;
-  callbackServer.stop(true);
+  // Keep server alive briefly so the browser can render the success page
+  setTimeout(() => callbackServer.stop(true), 3000);
 
   // 3. Validate the token and get user info
   const res = await fetch(`${SERVICE_URL}/auth/token?token=${token}`);
@@ -79,8 +80,20 @@ async function login() {
     participant_id: string;
   };
 
+  // Fetch org name
+  let orgName = userInfo.org_id;
+  try {
+    const orgRes = await fetch(`${SERVICE_URL}/auth/token?token=${token}`);
+    if (orgRes.ok) {
+      const orgData = (await orgRes.json()) as { org_id: string };
+      // The org name isn't in the token — use the email domain as display
+      orgName = userInfo.email.split("@")[1].split(".")[0];
+      orgName = orgName.charAt(0).toUpperCase() + orgName.slice(1);
+    }
+  } catch { /* use org_id as fallback */ }
+
   console.log(`\nAuthenticated as ${userInfo.name} (${userInfo.email})`);
-  console.log(`Organization: ${userInfo.org_id}`);
+  console.log(`Organization: ${orgName}`);
   console.log(`Participant ID: ${userInfo.participant_id}\n`);
 
   // 4. Store credentials
@@ -202,9 +215,30 @@ Based on the arguments provided, do ONE of the following:
   await writeFile(settingsPath, JSON.stringify(mergedSettingsWithStatusLine, null, 2));
   console.log(`Status line config written to ${settingsPath}`);
 
+  // 9. Post system event (device connected)
+  const hostname = (await import("node:os")).hostname();
+  try {
+    await fetch(`${SERVICE_URL.replace(":3000", ":4321")}/projects/_system/sessions/_system/events`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        sender: userInfo.participant_id,
+        payload: {
+          hook_event_name: "Stop",
+          session_id: "_system",
+          stop_response: `Device connected: ${hostname} (${process.platform})`,
+        },
+      }),
+    });
+    // Dashboard notification is handled by the cloud API after committing the event
+  } catch { /* non-fatal */ }
+
   console.log("\n✓ Polaris is set up on this machine!");
   console.log("\nNext steps:");
-  console.log("  1. Start the daemon:  bun run src/daemon/daemon.ts");
+  console.log("  1. Start the daemon:  polaris daemon");
   console.log("  2. Open your AI agent and run:  /polaris join <project> <session>");
 }
 
