@@ -54,26 +54,47 @@ export async function createDb(connectionString?: string): Promise<Sql> {
     )
   `;
 
+  // Migrate: if projects table exists without `id` column, drop and recreate
+  const [{ exists: hasId }] = await sql`
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'projects' AND column_name = 'id'
+    ) as exists
+  `;
+  if (!hasId) {
+    // Check if the old table exists at all
+    const [{ exists: hasTable }] = await sql`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_name = 'projects'
+      ) as exists
+    `;
+    if (hasTable) {
+      await sql`DROP TABLE IF EXISTS events`;
+      await sql`DROP TABLE IF EXISTS sessions`;
+      await sql`DROP TABLE IF EXISTS projects`;
+    }
+  }
+
   await sql`
     CREATE TABLE IF NOT EXISTS projects (
-      name TEXT NOT NULL,
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       org_id TEXT NOT NULL REFERENCES orgs(id),
+      name TEXT NOT NULL,
       slack_channel_id TEXT,
       slack_channel_name TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      PRIMARY KEY (org_id, name)
+      UNIQUE (org_id, name)
     )
   `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS sessions (
       name TEXT NOT NULL,
-      project TEXT NOT NULL,
+      project_id UUID NOT NULL REFERENCES projects(id),
       org_id TEXT NOT NULL,
       driver TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      PRIMARY KEY (org_id, project, name),
-      FOREIGN KEY (org_id, project) REFERENCES projects(org_id, name)
+      PRIMARY KEY (project_id, name)
     )
   `;
 
@@ -81,7 +102,7 @@ export async function createDb(connectionString?: string): Promise<Sql> {
     CREATE TABLE IF NOT EXISTS events (
       id UUID PRIMARY KEY,
       org_id TEXT NOT NULL,
-      project TEXT NOT NULL,
+      project_id UUID NOT NULL REFERENCES projects(id),
       session TEXT NOT NULL,
       timestamp TIMESTAMPTZ NOT NULL,
       source TEXT NOT NULL,
@@ -91,11 +112,11 @@ export async function createDb(connectionString?: string): Promise<Sql> {
   `;
 
   await sql`
-    CREATE INDEX IF NOT EXISTS idx_events_project ON events(org_id, project, timestamp)
+    CREATE INDEX IF NOT EXISTS idx_events_project ON events(project_id, timestamp)
   `;
 
   await sql`
-    CREATE INDEX IF NOT EXISTS idx_events_session ON events(org_id, project, session, timestamp)
+    CREATE INDEX IF NOT EXISTS idx_events_session ON events(project_id, session, timestamp)
   `;
 
   return sql;
@@ -172,30 +193,59 @@ export async function upsertUser(sql: Sql, id: string, email: string, name: stri
 
 export async function createProject(sql: Sql, orgId: string, name: string): Promise<Project> {
   const [row] = await sql`
-    INSERT INTO projects (name, org_id) VALUES (${name}, ${orgId}) RETURNING name, created_at
+    INSERT INTO projects (org_id, name) VALUES (${orgId}, ${name})
+    RETURNING id, name, slack_channel_id, slack_channel_name, created_at
   `;
-  return { name: row.name, created_at: row.created_at.toISOString() };
+  return {
+    id: row.id,
+    name: row.name,
+    slack_channel_id: row.slack_channel_id ?? null,
+    slack_channel_name: row.slack_channel_name ?? null,
+    created_at: row.created_at.toISOString(),
+  };
+}
+
+export async function renameProject(sql: Sql, orgId: string, oldName: string, newName: string): Promise<void> {
+  await sql`
+    UPDATE projects SET name = ${newName}, slack_channel_name = ${newName}
+    WHERE org_id = ${orgId} AND name = ${oldName}
+  `;
 }
 
 export async function setProjectSlackChannel(sql: Sql, orgId: string, projectName: string, channelId: string, channelName?: string): Promise<void> {
-  if (channelName) {
-    await sql`UPDATE projects SET slack_channel_id = ${channelId}, slack_channel_name = ${channelName} WHERE org_id = ${orgId} AND name = ${projectName}`;
-  } else {
-    await sql`UPDATE projects SET slack_channel_id = ${channelId} WHERE org_id = ${orgId} AND name = ${projectName}`;
-  }
+  await sql`
+    UPDATE projects SET slack_channel_id = ${channelId}, slack_channel_name = ${channelName ?? null}
+    WHERE org_id = ${orgId} AND name = ${projectName}
+  `;
 }
 
 export async function listProjects(sql: Sql, orgId: string): Promise<Project[]> {
-  const rows = await sql`SELECT name, slack_channel_id, slack_channel_name, created_at FROM projects WHERE org_id = ${orgId} ORDER BY created_at ASC`;
-  return rows.map((r) => ({ name: r.name, slack_channel_id: r.slack_channel_id ?? null, slack_channel_name: r.slack_channel_name ?? null, created_at: r.created_at.toISOString() }));
+  const rows = await sql`
+    SELECT id, name, slack_channel_id, slack_channel_name, created_at
+    FROM projects WHERE org_id = ${orgId} ORDER BY created_at ASC
+  `;
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    slack_channel_id: r.slack_channel_id ?? null,
+    slack_channel_name: r.slack_channel_name ?? null,
+    created_at: r.created_at.toISOString(),
+  }));
 }
 
 export async function getProject(sql: Sql, orgId: string, name: string): Promise<Project | null> {
   const [row] = await sql`
-    SELECT name, slack_channel_id, slack_channel_name, created_at FROM projects WHERE org_id = ${orgId} AND name = ${name}
+    SELECT id, name, slack_channel_id, slack_channel_name, created_at
+    FROM projects WHERE org_id = ${orgId} AND name = ${name}
   `;
   if (!row) return null;
-  return { name: row.name, slack_channel_id: row.slack_channel_id ?? null, slack_channel_name: row.slack_channel_name ?? null, created_at: row.created_at.toISOString() };
+  return {
+    id: row.id,
+    name: row.name,
+    slack_channel_id: row.slack_channel_id ?? null,
+    slack_channel_name: row.slack_channel_name ?? null,
+    created_at: row.created_at.toISOString(),
+  };
 }
 
 // --- Sessions (org-scoped) ---
@@ -208,13 +258,15 @@ export async function createSession(
   driver: ParticipantId | null
 ): Promise<Session> {
   const [row] = await sql`
-    INSERT INTO sessions (name, project, org_id, driver)
-    VALUES (${name}, ${project}, ${orgId}, ${driver})
-    RETURNING name, project, driver, created_at
+    INSERT INTO sessions (name, project_id, org_id, driver)
+    SELECT ${name}, p.id, ${orgId}, ${driver}
+    FROM projects p WHERE p.org_id = ${orgId} AND p.name = ${project}
+    RETURNING name, driver, created_at
   `;
+  if (!row) throw new Error(`Project not found: ${project}`);
   return {
     name: row.name,
-    project: row.project,
+    project,
     driver: row.driver,
     created_at: row.created_at.toISOString(),
   };
@@ -222,8 +274,10 @@ export async function createSession(
 
 export async function getSession(sql: Sql, orgId: string, project: string, name: string): Promise<Session | null> {
   const [row] = await sql`
-    SELECT name, project, driver, created_at FROM sessions
-    WHERE org_id = ${orgId} AND project = ${project} AND name = ${name}
+    SELECT s.name, p.name as project, s.driver, s.created_at
+    FROM sessions s
+    JOIN projects p ON s.project_id = p.id
+    WHERE s.org_id = ${orgId} AND p.name = ${project} AND s.name = ${name}
   `;
   if (!row) return null;
   return {
@@ -237,14 +291,16 @@ export async function getSession(sql: Sql, orgId: string, project: string, name:
 export async function setDriver(sql: Sql, orgId: string, project: string, session: string, driver: ParticipantId): Promise<void> {
   await sql`
     UPDATE sessions SET driver = ${driver}
-    WHERE org_id = ${orgId} AND project = ${project} AND name = ${session}
+    WHERE org_id = ${orgId} AND name = ${session}
+      AND project_id = (SELECT id FROM projects WHERE org_id = ${orgId} AND name = ${project})
   `;
 }
 
 export async function clearDriver(sql: Sql, orgId: string, project: string, session: string): Promise<void> {
   await sql`
     UPDATE sessions SET driver = NULL
-    WHERE org_id = ${orgId} AND project = ${project} AND name = ${session}
+    WHERE org_id = ${orgId} AND name = ${session}
+      AND project_id = (SELECT id FROM projects WHERE org_id = ${orgId} AND name = ${project})
   `;
 }
 
@@ -252,8 +308,9 @@ export async function clearDriver(sql: Sql, orgId: string, project: string, sess
 
 export async function pushEvent(sql: Sql, orgId: string, event: PolarisEvent): Promise<void> {
   await sql`
-    INSERT INTO events (id, org_id, project, session, timestamp, source, sender, payload)
-    VALUES (${event.id}, ${orgId}, ${event.project}, ${event.session}, ${event.timestamp}, ${event.source}, ${event.sender}, ${sql.json(event.payload)})
+    INSERT INTO events (id, org_id, project_id, session, timestamp, source, sender, payload)
+    SELECT ${event.id}, ${orgId}, p.id, ${event.session}, ${event.timestamp}, ${event.source}, ${event.sender}, ${sql.json(event.payload)}
+    FROM projects p WHERE p.org_id = ${orgId} AND p.name = ${event.project}
   `;
 }
 
@@ -279,32 +336,44 @@ function rowToEvent(row: {
 
 export async function getProjectEvents(sql: Sql, orgId: string, project: string): Promise<PolarisEvent[]> {
   const rows = await sql`
-    SELECT id, project, session, timestamp, source, sender, payload
-    FROM events WHERE org_id = ${orgId} AND project = ${project} ORDER BY timestamp ASC
+    SELECT e.id, p.name as project, e.session, e.timestamp, e.source, e.sender, e.payload
+    FROM events e
+    JOIN projects p ON e.project_id = p.id
+    WHERE e.org_id = ${orgId} AND p.name = ${project}
+    ORDER BY e.timestamp ASC
   `;
   return rows.map(rowToEvent);
 }
 
 export async function getSessionEvents(sql: Sql, orgId: string, project: string, session: string): Promise<PolarisEvent[]> {
   const rows = await sql`
-    SELECT id, project, session, timestamp, source, sender, payload
-    FROM events WHERE org_id = ${orgId} AND project = ${project} AND session = ${session} ORDER BY timestamp ASC
+    SELECT e.id, p.name as project, e.session, e.timestamp, e.source, e.sender, e.payload
+    FROM events e
+    JOIN projects p ON e.project_id = p.id
+    WHERE e.org_id = ${orgId} AND p.name = ${project} AND e.session = ${session}
+    ORDER BY e.timestamp ASC
   `;
   return rows.map(rowToEvent);
 }
 
 export async function getOrgEventsSince(sql: Sql, orgId: string, since: string): Promise<PolarisEvent[]> {
   const rows = await sql`
-    SELECT id, project, session, timestamp, source, sender, payload
-    FROM events WHERE org_id = ${orgId} AND timestamp > ${since} ORDER BY timestamp ASC
+    SELECT e.id, p.name as project, e.session, e.timestamp, e.source, e.sender, e.payload
+    FROM events e
+    JOIN projects p ON e.project_id = p.id
+    WHERE e.org_id = ${orgId} AND e.timestamp > ${since}
+    ORDER BY e.timestamp ASC
   `;
   return rows.map(rowToEvent);
 }
 
 export async function getEventsSince(sql: Sql, orgId: string, project: string, since: string): Promise<PolarisEvent[]> {
   const rows = await sql`
-    SELECT id, project, session, timestamp, source, sender, payload
-    FROM events WHERE org_id = ${orgId} AND project = ${project} AND timestamp > ${since} ORDER BY timestamp ASC
+    SELECT e.id, p.name as project, e.session, e.timestamp, e.source, e.sender, e.payload
+    FROM events e
+    JOIN projects p ON e.project_id = p.id
+    WHERE e.org_id = ${orgId} AND p.name = ${project} AND e.timestamp > ${since}
+    ORDER BY e.timestamp ASC
   `;
   return rows.map(rowToEvent);
 }

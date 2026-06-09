@@ -297,6 +297,38 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
         }
       }
 
+      // POST /rename — rename a project (proxies to cloud API, updates local state)
+      if (method === "POST" && pathname === "/rename") {
+        try {
+          const body = (await req.json()) as { oldName: string; newName: string };
+          if (!body.oldName || !body.newName) return error("oldName and newName required", 400);
+
+          // Call cloud API to rename in DB
+          const serviceUrl = getServiceUrl();
+          const res = await fetch(`${serviceUrl}/projects/${body.oldName}/rename`, {
+            method: "POST",
+            headers: await authHeaders(),
+            body: JSON.stringify({ name: body.newName }),
+          });
+          if (!res.ok) {
+            const err = await res.text();
+            return new Response(err, { status: res.status });
+          }
+
+          // Update in-memory sessions
+          for (const m of sessions.values()) {
+            if (m.project === body.oldName) {
+              m.project = body.newName;
+              m.slackChannel = body.newName;
+            }
+          }
+
+          return json({ status: "renamed", oldName: body.oldName, newName: body.newName });
+        } catch {
+          return error("Invalid JSON", 400);
+        }
+      }
+
       // POST /channel-update — bridge pushes channel rename notifications
       if (method === "POST" && pathname === "/channel-update") {
         try {

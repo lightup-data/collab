@@ -1,8 +1,8 @@
 ---
 name: polaris
 description: Connect to a Polaris multiplayer collaboration session
-allowed-tools: polaris_connect polaris_disconnect polaris_status polaris_reply polaris_context
-argument-hint: [join <project> <session> | disconnect | (no args for status)]
+allowed-tools: polaris_connect polaris_disconnect polaris_status polaris_reply polaris_context polaris_rename
+argument-hint: [join <project> <session> | rename <new-name> | disconnect | (no args for status)]
 ---
 
 ## Polaris — Multiplayer Collaboration
@@ -17,6 +17,10 @@ Based on the arguments provided, do ONE of the following:
 1. Call `polaris_connect` with the given project, session, and user identity
 2. If `.polaris.json` exists in the repo root, read the `user` field from it. Otherwise ask the user for their participant ID (e.g., `user:manu`).
 3. Report the connection status
+
+**`/polaris rename <new-name>`** — Rename the current project:
+1. Call `polaris_rename` with the new name
+2. Report the result
 
 **`/polaris disconnect`** — Disconnect:
 1. Call `polaris_disconnect`
