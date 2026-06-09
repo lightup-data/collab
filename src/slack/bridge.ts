@@ -74,12 +74,12 @@ async function getOrCreateChannel(web: WebClient, sql: Sql, orgId: string, proje
   // 4. Persist the channel ID in DB (resilient to renames)
   channelCache.set(projectName, channelId);
   // Resolve and store channel name (for status line display)
-  let channelName: string | undefined;
+  let resolvedName: string | undefined;
   try {
     const info = await web.conversations.info({ channel: channelId });
-    channelName = info.channel?.name ?? undefined;
+    resolvedName = info.channel?.name ?? undefined;
   } catch {}
-  await setProjectSlackChannel(sql, orgId, projectName, channelId, channelName);
+  await setProjectSlackChannel(sql, orgId, projectName, channelId, resolvedName);
   return channelId;
 }
 
