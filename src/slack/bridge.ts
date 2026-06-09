@@ -7,7 +7,7 @@
 
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
-import { createDb, getOrg, listProjects, getProjectEvents, type Sql, type Org } from "../service/db";
+import { createDb, getOrg, listProjects, getProjectEvents, getSession, createSession, pushEvent, type Sql, type Org } from "../service/db";
 import { formatEventForSlack } from "./format";
 import type { PolarisEvent } from "../types";
 
@@ -65,6 +65,9 @@ async function postEventToSlack(web: WebClient, event: PolarisEvent): Promise<vo
   // Skip _system events (handled separately)
   if (event.project === "_system") return;
 
+  // Skip events that originated from Slack (avoid re-posting)
+  if (event.sender.startsWith("slack:")) return;
+
   const msg = formatEventForSlack(event);
   if (!msg) return;
 
@@ -84,7 +87,7 @@ async function postEventToSlack(web: WebClient, event: PolarisEvent): Promise<vo
 
 async function handleSlackMessage(
   web: WebClient,
-  apiBaseUrl: string,
+  sql: Sql,
   orgId: string,
   botUserId: string,
   event: {
@@ -120,7 +123,9 @@ async function handleSlackMessage(
     }
   }
 
-  if (!projectName) return;
+  if (!projectName) {
+    return;
+  }
 
   // Parse target session from message: @session-name or first word
   // Format: "@session message" or "session: message"
@@ -151,18 +156,41 @@ async function handleSlackMessage(
     }
   } catch { /* use ID */ }
 
-  // Inject into the session via the cloud API
+  // Inject directly into DB (bridge runs server-side with DB access)
   try {
-    await fetch(`${apiBaseUrl}/projects/${projectName}/sessions/${targetSession}/inject`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    // Ensure session exists
+    let session = await getSession(sql, orgId, projectName, targetSession);
+    if (!session) {
+      try { session = await createSession(sql, orgId, projectName, targetSession, null); } catch { /* exists */ }
+      session = await getSession(sql, orgId, projectName, targetSession);
+    }
+    if (!session) {
+      console.error(`[bridge] Session ${projectName}/${targetSession} not found`);
+      await web.chat.postMessage({
+        channel: event.channel,
+        thread_ts: event.ts,
+        text: `Session \`${targetSession}\` not found in project \`${projectName}\`.`,
+      });
+      return;
+    }
+    const injectEvent = {
+      id: crypto.randomUUID(),
+      project: projectName,
+      session: targetSession,
+      timestamp: new Date().toISOString(),
+      source: "inject" as const,
+      sender: senderName as `${"user" | "agent" | "slack"}:${string}`,
+      payload: {
+        type: "inject" as const,
         content,
-        sender: senderName,
-      }),
-    });
+        sender: senderName as `${"user" | "agent" | "slack"}:${string}`,
+        target: targetSession,
+      },
+    };
+    await pushEvent(sql, orgId, injectEvent);
+    console.error(`[bridge] Injected into ${projectName}/${targetSession}: ${content.slice(0, 50)}`);
   } catch (e) {
-    console.error(`[bridge] Failed to inject message into ${projectName}/${targetSession}:`, e);
+    console.error(`[bridge] Failed to inject:`, e);
   }
 }
 
@@ -197,10 +225,17 @@ export async function startBridge(opts: {
   }
 
   // Listen for Slack messages
-  socketMode.on("message", async ({ event, ack }) => {
-    await ack();
-    if (event.subtype) return; // Skip edits, joins, etc.
-    await handleSlackMessage(web, apiBaseUrl, opts.orgId, botUserId, event);
+  socketMode.on("message", async ({ event, ack }: { event: Record<string, unknown>; ack: () => Promise<void> }) => {
+    try {
+      await ack();
+      const msg = event as { text?: string; user?: string; channel?: string; ts?: string; subtype?: string };
+      console.error(`[bridge] message: user=${msg.user} channel=${msg.channel} text=${msg.text?.slice(0, 80)}`);
+      if (msg.subtype || !msg.channel || !msg.text || !msg.user) return;
+      if (msg.user === botUserId) return;
+      await handleSlackMessage(web, sql, opts.orgId, botUserId, msg as { text: string; user: string; channel: string; ts: string });
+    } catch (e) {
+      console.error(`[bridge] message handler error:`, e);
+    }
   });
 
   // Poll for new events directly from DB (bridge runs server-side)

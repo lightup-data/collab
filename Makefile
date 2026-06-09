@@ -19,7 +19,7 @@ dev-down:
 # Cloud service API (port 4321)
 api:
 	@echo "Starting API server on http://localhost:4321"
-	@npx bun run src/service/server.ts &
+	@npx bun run src/service/server.ts 2>/tmp/polaris-api.log &
 
 # Web app (port 3000)
 web:
@@ -37,7 +37,7 @@ bridge:
 	  ORG=$$(docker exec collab-polaris-postgres-1 psql -U polaris -d polaris -t -A -c "SELECT id FROM orgs WHERE slack_team_id IS NOT NULL LIMIT 1;" 2>/dev/null); \
 	  if [ -n "$$ORG" ]; then \
 	    echo "Starting Slack bridge for org $$ORG"; \
-	    npx bun run src/slack/bridge.ts $$ORG & \
+	    npx bun run src/slack/bridge.ts $$ORG 2>/tmp/polaris-bridge.log & \
 	  else echo "Skipping bridge (no Slack-connected org found)"; fi; \
 	fi
 
