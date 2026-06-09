@@ -7,7 +7,7 @@
 
 import { SocketModeClient } from "@slack/socket-mode";
 import { WebClient } from "@slack/web-api";
-import { createDb, getOrg, listProjects, getProjectEvents, getSession, createSession, pushEvent, type Sql, type Org } from "../service/db";
+import { createDb, getOrg, listProjects, getProjectEvents, getOrgEventsSince, getSession, createSession, pushEvent, type Sql, type Org } from "../service/db";
 import { formatEventForSlack } from "./format";
 import type { PolarisEvent } from "../types";
 
@@ -240,21 +240,22 @@ export async function startBridge(opts: {
 
   // Poll for new events directly from DB (bridge runs server-side)
   const postedEventIds = new Set<string>();
+  let lastPollTime = new Date().toISOString();
 
   async function pollEvents() {
     try {
-      const projects = await listProjects(sql, opts.orgId);
+      const since = lastPollTime;
+      const events = await getOrgEventsSince(sql, opts.orgId, since);
+      const now = new Date().toISOString();
 
-      for (const proj of projects) {
-        if (proj.name === "_system") continue;
-
-        const events = await getProjectEvents(sql, opts.orgId, proj.name);
-        for (const event of events) {
-          if (postedEventIds.has(event.id)) continue;
-          postedEventIds.add(event.id);
-          await postEventToSlack(web, event);
-        }
+      for (const event of events) {
+        if (event.project === "_system") continue;
+        if (postedEventIds.has(event.id)) continue;
+        postedEventIds.add(event.id);
+        await postEventToSlack(web, event);
       }
+
+      lastPollTime = now;
     } catch (e) {
       console.error("[bridge] Poll error:", e);
     }
