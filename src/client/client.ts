@@ -95,6 +95,17 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "polaris_rename",
+      description: "Rename the current project. Also renames the Slack channel.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          name: { type: "string", description: "New project name" },
+        },
+        required: ["name"],
+      },
+    },
+    {
       name: "polaris_context",
       description: "Fetch activity from a sibling session in this project. Use this to see what other drivers have been doing.",
       inputSchema: {
@@ -182,6 +193,25 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       return { content: [{ type: "text", text: `Failed to send reply: ${res.status}` }] };
     } catch {
       return { content: [{ type: "text", text: "Failed to reach the cloud service." }] };
+    }
+  }
+
+  if (name === "polaris_rename") {
+    if (!currentProject) {
+      return { content: [{ type: "text", text: "Not connected to a Polaris session. Use polaris_connect first." }] };
+    }
+    const newName = (args as { name: string }).name;
+    try {
+      const res = await daemonPost("/rename", { oldName: currentProject, newName });
+      const body = await res.json();
+      if (res.ok) {
+        const oldName = currentProject;
+        currentProject = newName;
+        return { content: [{ type: "text", text: `Renamed project "${oldName}" to "${newName}".` }] };
+      }
+      return { content: [{ type: "text", text: `Failed to rename: ${(body as { error?: string }).error ?? "unknown error"}` }] };
+    } catch {
+      return { content: [{ type: "text", text: "Failed to rename — is the Polaris daemon running?" }] };
     }
   }
 

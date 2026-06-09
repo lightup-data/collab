@@ -2,10 +2,12 @@
 
 import type { PolarisEvent } from "../types";
 
+// Messages longer than this get a summary in the channel + full content in a thread
+export const THREAD_THRESHOLD = 700;
+
 export interface SlackMessage {
   text: string;
   blocks?: Array<Record<string, unknown>>;
-  attachments?: Array<Record<string, unknown>>;
   username?: string;
   icon_emoji?: string;
 }
@@ -95,10 +97,9 @@ function formatAgentResponse(session: string, response: string): SlackMessage | 
 
 function formatAdvisorMessage(sender: string, target: string, content: string): SlackMessage | null {
   if (!content) return null;
-  const body = toMrkdwn(content);
   return {
-    text: body,
-    blocks: [{ type: "section", text: { type: "mrkdwn", text: `→ _${target}_:  ${body}` } }],
+    text: toMrkdwn(content),
+    blocks: [{ type: "section", text: { type: "mrkdwn", text: toMrkdwn(`→ _${target}_:  ${content}`) } }],
     username: displayName(sender),
     icon_emoji: personaIcon(sender),
   };
@@ -106,10 +107,8 @@ function formatAdvisorMessage(sender: string, target: string, content: string): 
 
 // --- Markdown → Slack mrkdwn ---
 
-function toMrkdwn(text: string): string {
-  const maxLen = 2000;
-  const truncated = text.length > maxLen ? text.slice(0, maxLen) + "..." : text;
-  return truncated
+export function toMrkdwn(text: string): string {
+  return text
     .replace(/```(\w*)\n([\s\S]*?)```/g, "```$2```")
     .replace(/\*\*(.*?)\*\*/g, "*$1*")
     .replace(/__(.*?)__/g, "*$1*");

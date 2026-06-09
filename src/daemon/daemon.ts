@@ -10,6 +10,7 @@ interface SessionMapping {
   project: string;
   session: string;
   user: string;
+  slackChannel?: string;
   ws: WebSocket | null;
 }
 
@@ -195,6 +196,17 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
             }); // Ignore errors (might already be driver)
           }
 
+          // Fetch Slack channel name for status display
+          try {
+            const projRes = await fetch(`${serviceUrl}/projects/${body.project}`, {
+              headers: await authHeaders(),
+            });
+            if (projRes.ok) {
+              const projData = await projRes.json() as { slack_channel_name?: string };
+              mapping.slackChannel = projData.slack_channel_name ?? undefined;
+            }
+          } catch {}
+
           // Connect to cloud WebSocket
           connectCloudWs(mapping);
 
@@ -255,7 +267,7 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
             if (connectedSessions.length === 1) {
               // Only one active session — route to it and remember the mapping
               mapping = connectedSessions[0];
-              sessions.set(ccSessionId, { ...mapping, ccSessionId });
+              sessions.set(ccSessionId, { ...mapping, ccSessionId, slackChannel: undefined });
             } else if (connectedSessions.length > 1) {
               // Multiple sessions — can't determine which one. Discard.
               return json({ status: "ambiguous" });
@@ -285,6 +297,55 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
         }
       }
 
+      // POST /rename — rename a project (proxies to cloud API, updates local state)
+      if (method === "POST" && pathname === "/rename") {
+        try {
+          const body = (await req.json()) as { oldName: string; newName: string };
+          if (!body.oldName || !body.newName) return error("oldName and newName required", 400);
+
+          // Call cloud API to rename in DB
+          const serviceUrl = getServiceUrl();
+          const res = await fetch(`${serviceUrl}/projects/${body.oldName}/rename`, {
+            method: "POST",
+            headers: await authHeaders(),
+            body: JSON.stringify({ name: body.newName }),
+          });
+          if (!res.ok) {
+            const err = await res.text();
+            return new Response(err, { status: res.status });
+          }
+
+          // Update in-memory sessions
+          for (const m of sessions.values()) {
+            if (m.project === body.oldName) {
+              m.project = body.newName;
+              m.slackChannel = body.newName;
+            }
+          }
+
+          return json({ status: "renamed", oldName: body.oldName, newName: body.newName });
+        } catch {
+          return error("Invalid JSON", 400);
+        }
+      }
+
+      // POST /channel-update — bridge pushes channel rename notifications
+      if (method === "POST" && pathname === "/channel-update") {
+        try {
+          const body = (await req.json()) as { project: string; slackChannel: string };
+          if (!body.project || !body.slackChannel) return error("project and slackChannel required", 400);
+          // Update all sessions for this project
+          for (const m of sessions.values()) {
+            if (m.project === body.project) {
+              m.slackChannel = body.slackChannel;
+            }
+          }
+          return json({ status: "updated" });
+        } catch {
+          return error("Invalid JSON", 400);
+        }
+      }
+
       // GET /status/:ccSessionId — status line queries this
       if (method === "GET" && pathname.startsWith("/status/")) {
         const ccSessionId = pathname.slice("/status/".length);
@@ -292,11 +353,22 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
         if (!mapping || !mapping.project) {
           return json({ connected: false });
         }
+        // Resolve slackChannel from any session in the same project
+        let slackChannel = mapping.slackChannel ?? null;
+        if (!slackChannel) {
+          for (const m of sessions.values()) {
+            if (m.project === mapping.project && m.slackChannel) {
+              slackChannel = m.slackChannel;
+              break;
+            }
+          }
+        }
         return json({
           connected: true,
           project: mapping.project,
           session: mapping.session,
           user: mapping.user,
+          slackChannel,
         });
       }
 

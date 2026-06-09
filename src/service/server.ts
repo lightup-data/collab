@@ -8,6 +8,7 @@ import {
   createProject,
   listProjects,
   getProject,
+  renameProject,
   createSession,
   getSession,
   setDriver,
@@ -237,6 +238,37 @@ export async function startServer(opts: {
         const project = await getProject(sql, orgId, params.proj);
         if (!project) return error("Project not found", 404);
         return json(project);
+      }
+
+      params = matchRoute(method, pathname, "/projects/:proj/rename", "POST");
+      if (params) {
+        const project = await getProject(sql, orgId, params.proj);
+        if (!project) return error("Project not found", 404);
+        const body = await req.json() as { name?: string };
+        if (!body.name) return error("name is required", 400);
+        const existing = await getProject(sql, orgId, body.name);
+        if (existing) return error("A project with that name already exists", 409);
+        await renameProject(sql, orgId, params.proj, body.name);
+
+        // Rename Slack channel if one is linked
+        if (project.slack_channel_id) {
+          try {
+            const org = await getOrg(sql, orgId);
+            if (org?.slack_bot_token) {
+              const { WebClient } = await import("@slack/web-api");
+              const web = new WebClient(org.slack_bot_token);
+              await web.conversations.rename({
+                channel: project.slack_channel_id,
+                name: body.name.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 80),
+              });
+            }
+          } catch (e) {
+            // Non-fatal — DB rename succeeded, Slack rename is best-effort
+            console.error("[server] Slack channel rename failed:", e);
+          }
+        }
+
+        return json({ status: "renamed", oldName: params.proj, newName: body.name });
       }
 
       params = matchRoute(method, pathname, "/projects/:proj/messages", "GET");

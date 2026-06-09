@@ -208,12 +208,12 @@ describe("PolarisEvent", () => {
 
 describe("Project", () => {
   test("parses valid project", () => {
-    const result = Project.parse({ name: "pj", created_at: "2026-06-05T10:00:00.000Z" });
+    const result = Project.parse({ id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", name: "pj", created_at: "2026-06-05T10:00:00.000Z" });
     expect(result.name).toBe("pj");
   });
 
   test("rejects empty name", () => {
-    expect(() => Project.parse({ name: "", created_at: "2026-06-05T10:00:00.000Z" })).toThrow();
+    expect(() => Project.parse({ id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", name: "", created_at: "2026-06-05T10:00:00.000Z" })).toThrow();
   });
 });
 

@@ -2,6 +2,7 @@ import { describe, expect, test, beforeAll, afterAll, beforeEach } from "bun:tes
 import { createDb, createOrg, createProject, createSession, getSessionEvents, pushEvent, type Sql } from "../src/service/db";
 import { formatEventForSlack } from "../src/slack/format";
 import type { PolarisEvent } from "../src/types";
+import { resetTestData } from "./helpers";
 
 const DATABASE_URL = process.env.DATABASE_URL ?? "postgres://polaris:polaris@localhost:5432/polaris_test";
 
@@ -16,18 +17,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await sql`DROP TABLE IF EXISTS events`;
-  await sql`DROP TABLE IF EXISTS sessions`;
-  await sql`DROP TABLE IF EXISTS projects`;
-  await sql`DROP TABLE IF EXISTS users`;
-  await sql`DROP TABLE IF EXISTS orgs`;
-  await sql`CREATE TABLE IF NOT EXISTS orgs (id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT UNIQUE, domain TEXT, slack_team_id TEXT, slack_bot_token TEXT, slack_system_channel_id TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
-  await sql`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, org_id TEXT NOT NULL REFERENCES orgs(id), participant_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`;
-  await sql`CREATE TABLE IF NOT EXISTS projects (name TEXT NOT NULL, org_id TEXT NOT NULL REFERENCES orgs(id), created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (org_id, name))`;
-  await sql`CREATE TABLE IF NOT EXISTS sessions (name TEXT NOT NULL, project TEXT NOT NULL, org_id TEXT NOT NULL, driver TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (org_id, project, name), FOREIGN KEY (org_id, project) REFERENCES projects(org_id, name))`;
-  await sql`CREATE TABLE IF NOT EXISTS events (id UUID PRIMARY KEY, org_id TEXT NOT NULL, project TEXT NOT NULL, session TEXT NOT NULL, timestamp TIMESTAMPTZ NOT NULL, source TEXT NOT NULL, sender TEXT NOT NULL, payload JSONB NOT NULL)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_events_project ON events(org_id, project, timestamp)`;
-  await sql`CREATE INDEX IF NOT EXISTS idx_events_session ON events(org_id, project, session, timestamp)`;
+  await resetTestData(sql);
 
   await createOrg(sql, "test-org", "Test Org", "test.com");
   await createProject(sql, "test-org", "myproject");
