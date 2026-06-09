@@ -20,6 +20,7 @@ beforeAll(async () => {
 
   // Start daemon pointed at the cloud service
   process.env.POLARIS_SERVICE_URL = serviceUrl;
+  process.env.POLARIS_AUTH_TOKEN = "";
   const d = startDaemon(0);
   stopDaemon = d.stop;
   daemonUrl = `http://127.0.0.1:${d.server.port}`;

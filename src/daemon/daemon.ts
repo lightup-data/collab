@@ -1,4 +1,7 @@
 import type { Server, ServerWebSocket } from "bun";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { homedir } from "node:os";
 
 // --- Session registry ---
 
@@ -17,6 +20,31 @@ const mcpCallbacks = new Map<string, (event: unknown) => void>(); // keyed by cc
 
 function getServiceUrl(): string {
   return process.env.POLARIS_SERVICE_URL ?? "http://localhost:4321";
+}
+
+let cachedToken: string | null | undefined = undefined;
+async function getAuthToken(): Promise<string | null> {
+  if (cachedToken !== undefined) return cachedToken;
+  // Check env var first (for testing). Empty string means "no auth".
+  if (process.env.POLARIS_AUTH_TOKEN !== undefined) {
+    cachedToken = process.env.POLARIS_AUTH_TOKEN || null;
+    return cachedToken;
+  }
+  try {
+    const credsPath = join(homedir(), ".polaris", "credentials.json");
+    const creds = JSON.parse(await readFile(credsPath, "utf-8"));
+    cachedToken = creds.token ?? null;
+    return cachedToken;
+  } catch {
+    cachedToken = null;
+    return null;
+  }
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getAuthToken();
+  if (token) return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+  return { "Content-Type": "application/json" };
 }
 
 // --- Cloud WebSocket management ---
@@ -143,14 +171,14 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
           const serviceUrl = getServiceUrl();
           await fetch(`${serviceUrl}/projects`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: await authHeaders(),
             body: JSON.stringify({ name: body.project }),
           }); // Ignore 409 (already exists)
 
           // Ensure the session exists (create if not, claim driver)
           const sessionRes = await fetch(`${serviceUrl}/projects/${body.project}/sessions`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: await authHeaders(),
             body: JSON.stringify({ name: body.session, driver: body.user }),
           });
           if (!sessionRes.ok && sessionRes.status !== 409) {
@@ -162,7 +190,7 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
           if (sessionRes.status === 409) {
             await fetch(`${serviceUrl}/projects/${body.project}/sessions/${body.session}/driver`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: await authHeaders(),
               body: JSON.stringify({ driver: body.user }),
             }); // Ignore errors (might already be driver)
           }
@@ -218,7 +246,7 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
             `${serviceUrl}/projects/${mapping.project}/sessions/${mapping.session}/events`,
             {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: await authHeaders(),
               body: JSON.stringify({ sender: mapping.user, payload: body }),
             }
           );

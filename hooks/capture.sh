@@ -3,7 +3,7 @@
 # Reads hook JSON from stdin, POSTs to the local polaris client.
 # Always exits 0 to avoid blocking the coding agent.
 
-POLARIS_PORT="${POLARIS_PORT:-4321}"
+POLARIS_PORT="${POLARIS_PORT:-4322}"
 POLARIS_URL="http://127.0.0.1:${POLARIS_PORT}/events"
 
 # Read all of stdin
