@@ -102,6 +102,7 @@ tests/         Test suite (bun test)
 - [ ] Schema migration drops all data — the auto-migration detects old schema and recreates tables, losing all events including device connections. Need a proper migration strategy for production.
 - [ ] Capture all user input — currently only UserPromptSubmit is captured. Need to also capture tool call approvals, tool use rejections, ask-question responses, and any other user interaction that constitutes a prompt
 - [ ] Postgres backup cron job — scheduled `pg_dump` to Hetzner object storage for production disaster recovery
+- [ ] Daemon local buffer — write-ahead log for fault tolerance. If the API is slow or down, the daemon should persist events locally and flush them asynchronously with retry/backoff, so hooks and MCP tools never block or lose data
 
 ## Development
 
