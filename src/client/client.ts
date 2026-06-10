@@ -7,8 +7,7 @@ import {
 
 // --- Configuration ---
 
-const DAEMON_URL = process.env.POLARIS_DAEMON_URL ?? "http://127.0.0.1:4321";
-const SERVICE_URL = process.env.POLARIS_SERVICE_URL ?? "https://api.polaris.lightup.ai";
+const DAEMON_URL = process.env.POLARIS_DAEMON_URL ?? "http://127.0.0.1:4322";
 
 // Generate a stable session ID for this MCP server instance
 const CC_SESSION_ID = process.env.POLARIS_CC_SESSION_ID ?? crypto.randomUUID();
@@ -25,12 +24,6 @@ async function daemonPost(path: string, body: unknown): Promise<Response> {
 
 async function daemonGet(path: string): Promise<Response> {
   return fetch(`${DAEMON_URL}${path}`);
-}
-
-// --- Cloud service (direct, for context queries) ---
-
-async function serviceGet(path: string): Promise<Response> {
-  return fetch(`${SERVICE_URL}${path}`);
 }
 
 // --- Current connection state ---
@@ -175,24 +168,14 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     }
     const message = (args as { message: string }).message;
     try {
-      const res = await fetch(`${SERVICE_URL}/projects/${currentProject}/sessions/${currentSession}/events`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sender: currentUser,
-          payload: {
-            hook_event_name: "Stop",
-            session_id: CC_SESSION_ID,
-            stop_response: message,
-          },
-        }),
-      });
+      const res = await daemonPost("/reply", { ccSessionId: CC_SESSION_ID, message });
       if (res.ok) {
         return { content: [{ type: "text", text: "Reply sent to the floor." }] };
       }
-      return { content: [{ type: "text", text: `Failed to send reply: ${res.status}` }] };
+      const body = await res.json();
+      return { content: [{ type: "text", text: `Failed to send reply: ${(body as { error?: string }).error ?? res.status}` }] };
     } catch {
-      return { content: [{ type: "text", text: "Failed to reach the cloud service." }] };
+      return { content: [{ type: "text", text: "Failed to reach the daemon." }] };
     }
   }
 
@@ -221,7 +204,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     }
     const targetSession = (args as { session: string }).session;
     try {
-      const res = await serviceGet(`/projects/${currentProject}/sessions/${targetSession}/messages`);
+      const res = await daemonGet(`/context/${CC_SESSION_ID}/${targetSession}`);
       if (!res.ok) {
         return { content: [{ type: "text", text: `Could not fetch session "${targetSession}": ${res.status}` }] };
       }
@@ -238,7 +221,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         .join("\n");
       return { content: [{ type: "text", text: summary || "(no activity yet)" }] };
     } catch {
-      return { content: [{ type: "text", text: "Failed to reach the cloud service." }] };
+      return { content: [{ type: "text", text: "Failed to reach the daemon." }] };
     }
   }
 

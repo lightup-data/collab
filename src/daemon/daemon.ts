@@ -385,6 +385,61 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
         return json({ ok: true, version: "0.0.1", sessions: active });
       }
 
+      // POST /reply — proxy a reply event to the cloud API
+      if (method === "POST" && pathname === "/reply") {
+        try {
+          const body = (await req.json()) as { ccSessionId: string; message: string };
+          if (!body.ccSessionId || !body.message) return error("ccSessionId and message required", 400);
+          const mapping = sessions.get(body.ccSessionId);
+          if (!mapping || !mapping.project) return error("Not connected", 400);
+
+          const serviceUrl = getServiceUrl();
+          const res = await fetch(
+            `${serviceUrl}/projects/${mapping.project}/sessions/${mapping.session}/events`,
+            {
+              method: "POST",
+              headers: await authHeaders(),
+              body: JSON.stringify({
+                sender: mapping.user,
+                payload: {
+                  hook_event_name: "Stop",
+                  session_id: body.ccSessionId,
+                  stop_response: body.message,
+                },
+              }),
+            }
+          );
+          if (!res.ok) {
+            const err = await res.text();
+            return new Response(err, { status: res.status });
+          }
+          return json({ status: "sent" });
+        } catch {
+          return error("Invalid JSON", 400);
+        }
+      }
+
+      // GET /context/:ccSessionId/:session — proxy context fetch from cloud API
+      if (method === "GET" && pathname.match(/^\/context\/[^/]+\/[^/]+$/)) {
+        const parts = pathname.split("/");
+        const ccSessionId = parts[2];
+        const targetSession = parts[3];
+        const mapping = sessions.get(ccSessionId);
+        if (!mapping || !mapping.project) return error("Not connected", 400);
+
+        const serviceUrl = getServiceUrl();
+        const res = await fetch(
+          `${serviceUrl}/projects/${mapping.project}/sessions/${targetSession}/messages`,
+          { headers: await authHeaders() }
+        );
+        if (!res.ok) {
+          const err = await res.text();
+          return new Response(err, { status: res.status });
+        }
+        const data = await res.json();
+        return json(data);
+      }
+
       return error("Not found", 404);
     },
   });
