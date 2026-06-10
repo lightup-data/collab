@@ -118,7 +118,6 @@ async function login() {
         args: ["bun", clientPath],
         env: {
           POLARIS_DAEMON_URL: "http://127.0.0.1:4322",
-          POLARIS_SERVICE_URL: SERVICE_URL.includes("localhost") ? SERVICE_URL.replace(":3000", ":4321") : SERVICE_URL.replace("app.", "api."),
         },
       },
     },
@@ -252,7 +251,6 @@ async function daemon() {
     stderr: "inherit",
     env: {
       ...process.env,
-      POLARIS_SERVICE_URL: SERVICE_URL.includes("localhost") ? SERVICE_URL.replace(":3000", ":4321") : SERVICE_URL.replace("app.", "api."),
     },
   });
   await proc.exited;
