@@ -39,7 +39,7 @@ export function formatEventForSlack(event: PolarisEvent): SlackMessage | null {
       case "Stop": {
         const response = payload.stop_response || payload.last_assistant_message;
         if (!response) return null;
-        return formatAgentResponse(event.session, response);
+        return formatAgentResponse(event.sender, event.session, response);
       }
       case "PreToolUse":
       case "PostToolUse":
@@ -83,13 +83,13 @@ function formatUserPrompt(sender: string, session: string, prompt: string): Slac
 
 // --- Agent response ---
 
-function formatAgentResponse(session: string, response: string): SlackMessage | null {
+function formatAgentResponse(sender: string, session: string, response: string): SlackMessage | null {
   if (!response) return null;
   return {
     text: toMrkdwn(response),
     blocks: [{ type: "section", text: { type: "mrkdwn", text: toMrkdwn(response) } }],
-    username: `Agent (${session})`,
-    icon_emoji: ":robot_face:",
+    username: `${displayName(sender)} (${session})`,
+    icon_emoji: personaIcon(sender),
   };
 }
 
