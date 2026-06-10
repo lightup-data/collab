@@ -104,12 +104,13 @@ function ensureLogDir(): Promise<void> {
   return logReady;
 }
 
-async function logEvent(endpoint: string, payload: unknown): Promise<void> {
+async function logEvent(endpoint: string, payload: unknown, response?: { status: number; body?: unknown }): Promise<void> {
   try {
     await ensureLogDir();
-    const entry = JSON.stringify({ t: new Date().toISOString(), endpoint, payload }) + "\n";
+    const entry: Record<string, unknown> = { t: new Date().toISOString(), endpoint, payload };
+    if (response) entry.response = response;
     const file = join(LOG_DIR, `daemon-${new Date().toISOString().slice(0, 10)}.jsonl`);
-    await appendFile(file, entry);
+    await appendFile(file, JSON.stringify(entry) + "\n");
   } catch { /* best-effort — don't break the request */ }
 }
 
@@ -204,6 +205,7 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
           });
           if (!sessionRes.ok && sessionRes.status !== 409) {
             const err = await sessionRes.text();
+            await logEvent("/connect", body, { status: sessionRes.status, body: err });
             return error(`Failed to create session: ${err}`, 500);
           }
 
@@ -310,6 +312,7 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
 
           if (!res.ok) {
             const err = await res.text();
+            await logEvent("/events", body, { status: res.status, body: err });
             return new Response(err, { status: res.status });
           }
           return json({ status: "relayed" });
@@ -433,6 +436,7 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
           );
           if (!res.ok) {
             const err = await res.text();
+            await logEvent("/reply", body, { status: res.status, body: err });
             return new Response(err, { status: res.status });
           }
           return json({ status: "sent" });
