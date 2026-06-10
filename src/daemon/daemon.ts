@@ -1,5 +1,5 @@
 import type { Server, ServerWebSocket } from "bun";
-import { readFile } from "node:fs/promises";
+import { readFile, appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -94,6 +94,25 @@ function disconnectCloudWs(ccSessionId: string) {
   }
 }
 
+// --- Local event log (JSONL) for manual recovery ---
+
+const LOG_DIR = join(homedir(), ".polaris", "logs");
+let logReady: Promise<void> | null = null;
+
+function ensureLogDir(): Promise<void> {
+  if (!logReady) logReady = mkdir(LOG_DIR, { recursive: true }).then(() => {});
+  return logReady;
+}
+
+async function logEvent(endpoint: string, payload: unknown): Promise<void> {
+  try {
+    await ensureLogDir();
+    const entry = JSON.stringify({ t: new Date().toISOString(), endpoint, payload }) + "\n";
+    const file = join(LOG_DIR, `daemon-${new Date().toISOString().slice(0, 10)}.jsonl`);
+    await appendFile(file, entry);
+  } catch { /* best-effort — don't break the request */ }
+}
+
 // --- HTTP Server ---
 
 function json(data: unknown, status = 200): Response {
@@ -152,6 +171,7 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
             session: string;
             user: string;
           };
+          await logEvent("/connect", body);
           if (!body.ccSessionId || !body.project || !body.session || !body.user) {
             return error("ccSessionId, project, session, and user are required", 400);
           }
@@ -255,6 +275,7 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
       if (method === "POST" && pathname === "/events") {
         try {
           const body = (await req.json()) as { session_id?: string; [key: string]: unknown };
+          await logEvent("/events", body);
           const ccSessionId = body.session_id;
           if (!ccSessionId) return error("session_id required in hook payload", 400);
 
@@ -389,6 +410,7 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
       if (method === "POST" && pathname === "/reply") {
         try {
           const body = (await req.json()) as { ccSessionId: string; message: string };
+          await logEvent("/reply", body);
           if (!body.ccSessionId || !body.message) return error("ccSessionId and message required", 400);
           const mapping = sessions.get(body.ccSessionId);
           if (!mapping || !mapping.project) return error("Not connected", 400);
