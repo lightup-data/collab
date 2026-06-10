@@ -36,11 +36,24 @@ make clean
 # Install globally
 npm install -g @lightupai/polaris
 
-# Login (opens browser for Google SSO, installs hooks + MCP server)
-polaris login
+# Default setup: install local components + login to production
+polaris
 
-# Check daemon status
-polaris status
+# Or run steps independently:
+polaris install          # Install MCP server, hooks, skill, status line (no auth)
+polaris login            # Authenticate against production
+polaris login --local    # Authenticate against localhost (for local dev)
+
+# Manage environments
+polaris profiles         # List all profiles
+polaris use local        # Switch to local dev
+polaris use prod         # Switch to production
+
+# Other commands
+polaris daemon           # Start the local daemon
+polaris status           # Show active profile, daemon state, sessions
+polaris logout           # Remove active profile credentials
+polaris logout --all     # Remove all credentials
 ```
 
 ## Configuration

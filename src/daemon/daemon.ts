@@ -19,18 +19,52 @@ const sessions = new Map<string, SessionMapping>(); // keyed by ccSessionId
 // IPC callbacks for MCP servers to receive advisor messages
 const mcpCallbacks = new Map<string, (event: unknown) => void>(); // keyed by ccSessionId
 
+// --- Config resolution (env var > config.json > legacy credentials.json > defaults) ---
+
+interface PolarisConfig {
+  active: string;
+  profiles: Record<string, { api: string; token: string; [key: string]: unknown }>;
+}
+
+let cachedConfig: PolarisConfig | null | undefined = undefined;
+async function loadConfig(): Promise<PolarisConfig | null> {
+  if (cachedConfig !== undefined) return cachedConfig;
+  try {
+    const configPath = join(homedir(), ".polaris", "config.json");
+    cachedConfig = JSON.parse(await readFile(configPath, "utf-8"));
+    return cachedConfig;
+  } catch {
+    cachedConfig = null;
+    return null;
+  }
+}
+
 function getServiceUrl(): string {
-  return process.env.POLARIS_SERVICE_URL ?? "https://api.polaris.lightup.ai";
+  // 1. Env var override (Makefile uses this for local dev)
+  if (process.env.POLARIS_SERVICE_URL) return process.env.POLARIS_SERVICE_URL;
+  // 2. Active profile (read synchronously from cache — loaded at startup)
+  if (cachedConfig?.active && cachedConfig.profiles[cachedConfig.active]) {
+    return cachedConfig.profiles[cachedConfig.active].api;
+  }
+  // 3. Fallback
+  return "https://api.polaris.lightup.ai";
 }
 
 let cachedToken: string | null | undefined = undefined;
 async function getAuthToken(): Promise<string | null> {
   if (cachedToken !== undefined) return cachedToken;
-  // Check env var first (for testing). Empty string means "no auth".
+  // 1. Env var (for testing). Empty string means "no auth".
   if (process.env.POLARIS_AUTH_TOKEN !== undefined) {
     cachedToken = process.env.POLARIS_AUTH_TOKEN || null;
     return cachedToken;
   }
+  // 2. Active profile in config.json
+  const config = await loadConfig();
+  if (config?.active && config.profiles[config.active]?.token) {
+    cachedToken = config.profiles[config.active].token;
+    return cachedToken;
+  }
+  // 3. Legacy credentials.json
   try {
     const credsPath = join(homedir(), ".polaris", "credentials.json");
     const creds = JSON.parse(await readFile(credsPath, "utf-8"));
@@ -475,6 +509,9 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
 
 // --- Run if executed directly ---
 if (import.meta.main) {
+  // Load config before starting so getServiceUrl() has the active profile
+  await loadConfig();
   const { server } = startDaemon();
   console.error(`Polaris daemon listening on http://127.0.0.1:${server.port}`);
+  console.error(`  API endpoint: ${getServiceUrl()}`);
 }
