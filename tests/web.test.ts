@@ -36,7 +36,7 @@ describe("renderSetupView", () => {
     // Connect Slack button is present
     expect(html).toContain("Connect Slack");
     // Install CLI command is present
-    expect(html).toContain("npx @lightupai/polaris login");
+    expect(html).toContain("npx @lightupai/polaris");
     // Connect session command is present
     expect(html).toContain("/polaris join my-project my-session");
   });
@@ -53,7 +53,7 @@ describe("renderSetupView", () => {
     const highlightIdx = html.indexOf("border-polaris-300");
     expect(highlightIdx).toBeGreaterThan(devicesIdx);
     // Install CLI command present
-    expect(html).toContain("npx @lightupai/polaris login");
+    expect(html).toContain("npx @lightupai/polaris");
   });
 
   test("cli done: floor and devices done, sessions is highlighted", () => {
