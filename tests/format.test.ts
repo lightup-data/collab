@@ -31,10 +31,11 @@ describe("formatEventForSlack", () => {
 
   test("agent response: robot persona with session", () => {
     const result = formatEventForSlack(makeEvent({
+      sender: "agent:claude",
       payload: { hook_event_name: "Stop", session_id: "s1", stop_response: "Created auth.ts" },
     }));
     expect(result).not.toBeNull();
-    expect(result!.username).toBe("Agent (fxm)");
+    expect(result!.username).toBe("Agent: Claude (fxm)");
     expect(result!.icon_emoji).toBe(":robot_face:");
     expect(result!.text).toContain("Created auth.ts");
   });
