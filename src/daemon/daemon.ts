@@ -21,8 +21,8 @@ function generateSessionName(): string {
 
 const sessions = new Map<string, SessionMapping>(); // keyed by ccSessionId
 
-// IPC callbacks for MCP servers to receive advisor messages
-const mcpCallbacks = new Map<string, (event: unknown) => void>(); // keyed by ccSessionId
+// Advisor injects queued for delivery via the UserPromptSubmit hook
+const injectQueues = new Map<string, Array<{ from: string; content: string; timestamp: string }>>(); // keyed by ccSessionId
 
 // --- Config resolution (env var > config.json > legacy credentials.json > defaults) ---
 
@@ -97,10 +97,18 @@ function connectCloudWs(mapping: SessionMapping) {
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data as string);
-      // Forward inject events to the registered MCP callback
+      // Queue inject events for delivery via the UserPromptSubmit hook
       if (data.source === "inject") {
-        const callback = mcpCallbacks.get(mapping.ccSessionId);
-        if (callback) callback(data);
+        let queue = injectQueues.get(mapping.ccSessionId);
+        if (!queue) {
+          queue = [];
+          injectQueues.set(mapping.ccSessionId, queue);
+        }
+        queue.push({
+          from: data.sender,
+          content: data.payload?.content ?? "",
+          timestamp: data.timestamp,
+        });
       }
     } catch {
       // Ignore malformed messages
@@ -169,7 +177,6 @@ function error(message: string, status: number): Response {
 export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 4322)): {
   server: Server;
   sessions: Map<string, SessionMapping>;
-  mcpCallbacks: Map<string, (event: unknown) => void>;
   stop: () => void;
 } {
   const server = Bun.serve({
@@ -311,6 +318,7 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
           const body = (await req.json()) as { ccSessionId: string };
           if (!body.ccSessionId) return error("ccSessionId required", 400);
           disconnectCloudWs(body.ccSessionId);
+          injectQueues.delete(body.ccSessionId);
           const mapping = sessions.get(body.ccSessionId);
           if (mapping) {
             mapping.project = "";
@@ -332,6 +340,7 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
           mapping.user = "";
         }
         sessions.clear();
+        injectQueues.clear();
         return json({ status: "all_disconnected" });
       }
 
@@ -353,6 +362,14 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
               // Only one active session — route to it and remember the mapping
               mapping = connectedSessions[0];
               sessions.set(ccSessionId, { ...mapping, ccSessionId, slackChannel: undefined });
+              // Share the inject queue between the original ccSessionId (where
+              // the cloud WS enqueues) and this CC hook session_id alias
+              let queue = injectQueues.get(mapping.ccSessionId);
+              if (!queue) {
+                queue = [];
+                injectQueues.set(mapping.ccSessionId, queue);
+              }
+              injectQueues.set(ccSessionId, queue);
             } else if (connectedSessions.length > 1) {
               // Multiple sessions — can't determine which one. Discard.
               return json({ status: "ambiguous" });
@@ -380,6 +397,14 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
             const err = await res.text();
             await logEvent("/events", body, { status: res.status, body: err });
             return new Response(err, { status: res.status });
+          }
+
+          // UserPromptSubmit: drain queued advisor injects and hand them back
+          // to the hook, which surfaces them via additionalContext
+          if (hookEvent === "UserPromptSubmit") {
+            const queue = injectQueues.get(mapping.ccSessionId);
+            const pendingInjects = queue ? queue.splice(0, queue.length) : [];
+            return json({ ok: true, pendingInjects });
           }
           return json({ status: "relayed" });
         } catch {
@@ -491,7 +516,8 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
               method: "POST",
               headers: await authHeaders(),
               body: JSON.stringify({
-                sender: mapping.user,
+                // Replies come from the agent, not the human driver
+                sender: mapping.agent,
                 payload: {
                   hook_event_name: "Stop",
                   session_id: body.ccSessionId,
@@ -536,7 +562,7 @@ export function startDaemon(port = Number(process.env.POLARIS_DAEMON_PORT ?? 432
     },
   });
 
-  return { server, sessions, mcpCallbacks, stop: () => server.stop(true) };
+  return { server, sessions, stop: () => server.stop(true) };
 }
 
 // --- Run if executed directly ---

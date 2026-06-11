@@ -38,6 +38,8 @@ const mcp = new Server(
   { name: "polaris", version: "0.0.1" },
   {
     capabilities: {
+      // claude/channel push delivery is deferred — injects reach the agent
+      // via the UserPromptSubmit hook (see daemon injectQueues)
       experimental: { "claude/channel": {} },
       tools: {},
     },
@@ -240,13 +242,7 @@ async function main() {
     console.error("Warning: Polaris daemon not reachable. Start it with `bun run src/daemon/daemon.ts`.");
   }
 
-  // Poll daemon for advisor messages and inject into MCP session
-  setInterval(async () => {
-    if (!currentProject) return;
-    // The daemon's cloud WS forwards inject events to the mcpCallbacks map,
-    // but since we're in a separate process, we use HTTP polling as a fallback.
-    // In production, this would use IPC (Unix socket or named pipe).
-  }, 5000);
+  // inject delivery is handled via the UserPromptSubmit hook (see daemon injectQueues); claude/channel push deferred
 
   const transport = new StdioServerTransport();
   await mcp.connect(transport);

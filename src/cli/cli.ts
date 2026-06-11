@@ -106,6 +106,42 @@ function appToApi(appUrl: string): string {
 
 // --- Install ---
 
+// Wire Claude Code hooks + status line into ~/.claude/settings.json.
+// UserPromptSubmit/Stop run bun scripts (prompt-time inject delivery and full
+// Stop transcript capture); PreToolUse/PostToolUse use the plain curl relay.
+async function wireHooks(): Promise<void> {
+  const captureShPath = join(import.meta.dir, "..", "..", "hooks", "capture.sh");
+  const capturePromptPath = join(import.meta.dir, "..", "..", "hooks", "capture-prompt.ts");
+  const captureStopPath = join(import.meta.dir, "..", "..", "hooks", "capture-stop.ts");
+  const hooksConfig = {
+    UserPromptSubmit: [{ hooks: [{ type: "command", command: `npx bun "${capturePromptPath}"` }] }],
+    Stop: [{ hooks: [{ type: "command", command: `npx bun "${captureStopPath}"` }] }],
+    PreToolUse: [{ hooks: [{ type: "command", command: captureShPath }] }],
+    PostToolUse: [{ hooks: [{ type: "command", command: captureShPath }] }],
+  };
+
+  const settingsPath = join(CLAUDE_DIR, "settings.json");
+  let existingSettings: Record<string, unknown> = {};
+  try {
+    existingSettings = JSON.parse(await readFile(settingsPath, "utf-8"));
+  } catch { /* doesn't exist yet */ }
+
+  // Status line
+  const statusLinePath = join(import.meta.dir, "..", "..", "hooks", "statusline.sh");
+  const mergedSettings = {
+    ...existingSettings,
+    hooks: {
+      ...(existingSettings as { hooks?: Record<string, unknown> }).hooks,
+      ...hooksConfig,
+    },
+    statusLine: {
+      type: "command",
+      command: statusLinePath,
+    },
+  };
+  await writeFile(settingsPath, JSON.stringify(mergedSettings, null, 2));
+}
+
 async function install(participantId?: string) {
   await mkdir(CLAUDE_DIR, { recursive: true });
 
@@ -145,34 +181,7 @@ async function install(participantId?: string) {
   }
 
   // Hooks
-  const captureShPath = join(import.meta.dir, "..", "..", "hooks", "capture.sh");
-  const hooksConfig = {
-    UserPromptSubmit: [{ hooks: [{ type: "command", command: captureShPath }] }],
-    Stop: [{ hooks: [{ type: "command", command: captureShPath }] }],
-    PreToolUse: [{ hooks: [{ type: "command", command: captureShPath }] }],
-    PostToolUse: [{ hooks: [{ type: "command", command: captureShPath }] }],
-  };
-
-  const settingsPath = join(CLAUDE_DIR, "settings.json");
-  let existingSettings: Record<string, unknown> = {};
-  try {
-    existingSettings = JSON.parse(await readFile(settingsPath, "utf-8"));
-  } catch { /* doesn't exist yet */ }
-
-  // Status line
-  const statusLinePath = join(import.meta.dir, "..", "..", "hooks", "statusline.sh");
-  const mergedSettings = {
-    ...existingSettings,
-    hooks: {
-      ...(existingSettings as { hooks?: Record<string, unknown> }).hooks,
-      ...hooksConfig,
-    },
-    statusLine: {
-      type: "command",
-      command: statusLinePath,
-    },
-  };
-  await writeFile(settingsPath, JSON.stringify(mergedSettings, null, 2));
+  await wireHooks();
   console.log("  ✓ Hooks + status line config written");
 
   // /polaris skill
@@ -346,6 +355,10 @@ Based on the arguments provided, do ONE of the following:
 ### Arguments: $ARGUMENTS
 `;
   await writeFile(join(skillDir, "SKILL.md"), skillContent);
+
+  // Hooks (same wiring as install — keeps hook commands up to date)
+  await wireHooks();
+  console.log("  ✓ Hooks + status line config written");
 
   // Post system event (device connected)
   const apiUrl = appToApi(appUrl);
