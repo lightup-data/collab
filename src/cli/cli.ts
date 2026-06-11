@@ -110,12 +110,14 @@ async function install(participantId?: string) {
   await mkdir(CLAUDE_DIR, { recursive: true });
 
   // MCP server config
-  const clientPath = join(import.meta.dir, "..", "client", "client.ts");
+  // Use npx to run polaris-mcp from the published package. This avoids
+  // dangling file paths when installed via npx (temp directory gets cleaned up).
+  // The polaris-mcp bin entry resolves to src/client/client.ts within the package.
   const mcpConfig = {
     mcpServers: {
       polaris: {
         command: "npx",
-        args: ["bun", clientPath],
+        args: ["-y", "-p", "@lightupai/polaris", "polaris-mcp"],
         env: {
           POLARIS_DAEMON_URL: "http://127.0.0.1:4322",
         },
