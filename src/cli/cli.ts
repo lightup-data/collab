@@ -115,7 +115,7 @@ async function install(participantId?: string) {
 
   console.log("  Installing MCP server to ~/.polaris/mcp/...");
   const npmInstall = Bun.spawnSync(
-    ["npm", "install", "--prefix", mcpDir, "@lightupai/polaris@latest"],
+    ["npm", "install", "--prefix", mcpDir, "@lightupai/polaris"],
     { stdout: "ignore", stderr: "pipe" }
   );
   if (npmInstall.exitCode !== 0) {
