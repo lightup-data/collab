@@ -117,7 +117,7 @@ async function install(participantId?: string) {
     mcpServers: {
       polaris: {
         command: "npx",
-        args: ["-y", "-p", "@lightupai/polaris", "polaris-mcp"],
+        args: ["-y", "polaris-mcp"],
         env: {
           POLARIS_DAEMON_URL: "http://127.0.0.1:4322",
         },
