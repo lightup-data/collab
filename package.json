@@ -3,7 +3,8 @@
   "version": "0.0.5",
   "type": "module",
   "bin": {
-    "polaris": "bin/polaris"
+    "polaris": "bin/polaris",
+    "polaris-mcp": "bin/polaris-mcp"
   },
   "scripts": {
     "test": "bun test"

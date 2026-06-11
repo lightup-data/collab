@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Polaris MCP server — runs as a child process of Claude Code
+SCRIPT="$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")"
+DIR="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
+
+if command -v bun &>/dev/null; then
+  exec bun "$DIR/src/client/client.ts" "$@"
+elif command -v bunx &>/dev/null; then
+  exec bunx bun "$DIR/src/client/client.ts" "$@"
+else
+  exec npx --yes bun "$DIR/src/client/client.ts" "$@"
+fi
