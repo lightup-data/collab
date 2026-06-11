@@ -14,17 +14,27 @@ import {
   setDriver,
   clearDriver,
   pushEvent,
+  getEventById,
   getProjectEvents,
   getSessionEvents,
   getSessionEventsPage,
   getEventsSince,
   searchEvents,
   setSessionLabel,
+  addAnnotation,
+  listSessionAnnotations,
+  listDecisions,
+  deleteAnnotation,
+  setProjectVisibility,
+  addProjectMember,
+  removeProjectMember,
+  listProjectMembers,
+  userCanAccessProject,
   type Sql,
 } from "./db";
 import { verifyToken, assertSecretConfigured, type TokenPayload } from "./auth";
 import type { PolarisEvent, ParticipantId } from "../types";
-import { HookPayload, ParticipantId as ParticipantIdSchema } from "../types";
+import { AnnotationKind, HookPayload, ParticipantId as ParticipantIdSchema } from "../types";
 
 // --- WebSocket subscriber management ---
 
@@ -109,6 +119,46 @@ function broadcastSse(event: PolarisEvent) {
   }
 }
 
+// --- Realtime backbone: LISTEN/NOTIFY de-dup ---
+//
+// pushEvent NOTIFYs 'polaris_event' with the event id after every insert. Each server
+// process opens one dedicated LISTEN connection (see startServer) and broadcasts events
+// it did not already broadcast inline. Module-level (like the subscriber maps above) so
+// multiple in-process servers (tests) share one de-dup horizon and never double-send.
+const recentlyBroadcast = new Map<string, number>(); // event id -> recorded-at ms
+const RECENTLY_BROADCAST_TTL_MS = 30_000;
+
+function markBroadcast(id: string) {
+  const now = Date.now();
+  recentlyBroadcast.set(id, now);
+  for (const [k, ts] of recentlyBroadcast) {
+    if (now - ts > RECENTLY_BROADCAST_TTL_MS) recentlyBroadcast.delete(k);
+  }
+}
+
+// --- Rate limiting (tiny in-memory fixed window; lenient by design) ---
+
+const RATE_WINDOW_MS = 60_000;
+const INJECT_LIMIT_PER_WINDOW = 60; // per token (or per IP when anonymous)
+const WRITE_LIMIT_PER_WINDOW = 600;
+const rateBuckets = new Map<string, { windowStart: number; count: number }>();
+
+function rateLimited(key: string, limit: number): boolean {
+  const now = Date.now();
+  let bucket = rateBuckets.get(key);
+  if (!bucket || now - bucket.windowStart >= RATE_WINDOW_MS) {
+    bucket = { windowStart: now, count: 0 };
+    rateBuckets.set(key, bucket);
+    if (rateBuckets.size > 10_000) {
+      for (const [k, b] of rateBuckets) {
+        if (now - b.windowStart >= RATE_WINDOW_MS) rateBuckets.delete(k);
+      }
+    }
+  }
+  bucket.count++;
+  return bucket.count > limit;
+}
+
 // --- Route matching ---
 
 type RouteParams = Record<string, string>;
@@ -190,6 +240,25 @@ export async function startServer(opts: {
     // Already exists
   }
 
+  // Realtime backbone: one dedicated LISTEN connection per server process. API-origin
+  // events broadcast inline in the POST handlers (which record their ids in
+  // recentlyBroadcast, so the echoed NOTIFY is skipped here); bridge-origin events
+  // (Slack injects etc.) never broadcast inline, so this path is what delivers them to
+  // live WS/SSE subscribers — and what enables multi-replica fan-out.
+  await sql.listen("polaris_event", (id) => {
+    if (!id || recentlyBroadcast.has(id)) return;
+    markBroadcast(id);
+    (async () => {
+      const found = await getEventById(sql, id);
+      if (!found) return;
+      const { org_id: _orgId, ...event } = found;
+      broadcastEvent(event);
+      broadcastSse(event);
+    })().catch((e) => {
+      console.error("[server] polaris_event listener failed:", e);
+    });
+  });
+
   const server = Bun.serve<WsData>({
     port,
     hostname: "0.0.0.0",
@@ -228,6 +297,33 @@ export async function startServer(opts: {
       if (a instanceof Response) return a;
       const orgId = a.orgId;
       const participantId = a.participantId;
+
+      // --- Rate limiting (write endpoints; per token, per IP when anonymous) ---
+      if (method !== "GET") {
+        const rateKey = participantId ?? `ip:${server.requestIP(req)?.address ?? "unknown"}`;
+        const isInject = /^\/projects\/[^/]+\/sessions\/[^/]+\/inject$/.test(pathname);
+        if (isInject) {
+          if (rateLimited(`inject:${rateKey}`, INJECT_LIMIT_PER_WINDOW)) {
+            return error("Rate limit exceeded: too many injects", 429);
+          }
+        } else if (rateLimited(`write:${rateKey}`, WRITE_LIMIT_PER_WINDOW)) {
+          return error("Rate limit exceeded", 429);
+        }
+      }
+
+      // --- Per-project ACL ---
+      // Members-only projects 403 for non-member participants on all project-scoped
+      // endpoints. Anonymous callers (participantId null: dev/tests) are always allowed,
+      // as are the ACL-management endpoints themselves (visibility/members), so a user
+      // who flips a project to 'members' can still add members afterwards.
+      const aclMatch = pathname.match(/^\/projects\/([^/]+)(\/.*)?$/);
+      if (aclMatch && participantId) {
+        const aclRest = aclMatch[2] ?? "";
+        const isAclAdmin = aclRest === "/visibility" || aclRest === "/members" || aclRest.startsWith("/members/");
+        if (!isAclAdmin && !(await userCanAccessProject(sql, orgId, aclMatch[1], participantId))) {
+          return error("Forbidden: project is restricted to members", 403);
+        }
+      }
 
       // --- Project endpoints ---
 
@@ -285,6 +381,49 @@ export async function startServer(opts: {
         }
 
         return json({ status: "renamed", oldName: params.proj, newName: body.name });
+      }
+
+      // --- Project ACL endpoints (visibility & members) ---
+
+      params = matchRoute(method, pathname, "/projects/:proj/visibility", "POST");
+      if (params) {
+        const project = await getProject(sql, orgId, params.proj);
+        if (!project) return error("Project not found", 404);
+        const body = await jsonBody(req);
+        const parsed = z.object({ visibility: z.enum(["org", "members"]) }).safeParse(body);
+        if (!parsed.success) return error("Invalid body: visibility must be 'org' or 'members'", 400);
+        await setProjectVisibility(sql, orgId, params.proj, parsed.data.visibility);
+        return json({ ok: true, visibility: parsed.data.visibility });
+      }
+
+      params = matchRoute(method, pathname, "/projects/:proj/members", "POST");
+      if (params) {
+        const project = await getProject(sql, orgId, params.proj);
+        if (!project) return error("Project not found", 404);
+        const body = await jsonBody(req);
+        const parsed = z
+          .object({ participant_id: z.string().min(1), role: z.string().optional() })
+          .safeParse(body);
+        if (!parsed.success) return error("Invalid body: participant_id is required", 400);
+        await addProjectMember(sql, orgId, params.proj, parsed.data.participant_id, parsed.data.role);
+        return json({ ok: true });
+      }
+
+      params = matchRoute(method, pathname, "/projects/:proj/members", "GET");
+      if (params) {
+        const project = await getProject(sql, orgId, params.proj);
+        if (!project) return error("Project not found", 404);
+        const members = await listProjectMembers(sql, orgId, params.proj);
+        return json({ members });
+      }
+
+      params = matchRoute(method, pathname, "/projects/:proj/members/:pid", "DELETE");
+      if (params) {
+        const project = await getProject(sql, orgId, params.proj);
+        if (!project) return error("Project not found", 404);
+        // Participant ids contain ':' which clients often percent-encode in paths
+        await removeProjectMember(sql, orgId, params.proj, decodeURIComponent(params.pid));
+        return json({ ok: true });
       }
 
       params = matchRoute(method, pathname, "/projects/:proj/messages", "GET");
@@ -362,6 +501,9 @@ export async function startServer(opts: {
           sender: parsed.data.sender,
           payload: parsed.data.payload,
         };
+        // Record before pushEvent so the echoed NOTIFY from our own LISTEN connection
+        // is de-duped; this handler broadcasts inline below.
+        markBroadcast(event.id);
         await pushEvent(sql, orgId, event);
         broadcastEvent(event);
         broadcastSse(event);
@@ -437,6 +579,9 @@ export async function startServer(opts: {
             target: params.sess,
           },
         };
+        // Record before pushEvent so the echoed NOTIFY from our own LISTEN connection
+        // is de-duped; this handler broadcasts inline below.
+        markBroadcast(event.id);
         await pushEvent(sql, orgId, event);
         broadcastEvent(event);
         broadcastSse(event);
@@ -483,19 +628,78 @@ export async function startServer(opts: {
         return json({ ok: true });
       }
 
+      // --- Annotations (curation: stars, tags, decisions) ---
+
+      params = matchRoute(method, pathname, "/projects/:proj/sessions/:sess/annotations", "POST");
+      if (params) {
+        const session = await getSession(sql, orgId, params.proj, params.sess);
+        if (!session) return error("Session not found", 404);
+        const body = await jsonBody(req);
+        const parsed = z
+          .object({
+            event_id: z.string().uuid().optional(),
+            kind: AnnotationKind,
+            value: z.string().optional(),
+          })
+          .safeParse(body);
+        if (!parsed.success) return error(`Invalid body: ${parsed.error.message}`, 400);
+        const { id } = await addAnnotation(sql, orgId, {
+          event_id: parsed.data.event_id ?? null,
+          project: params.proj,
+          session: params.sess,
+          participant_id: participantId,
+          kind: parsed.data.kind,
+          value: parsed.data.value ?? null,
+        });
+        return json({ id }, 201);
+      }
+
+      params = matchRoute(method, pathname, "/projects/:proj/sessions/:sess/annotations", "GET");
+      if (params) {
+        const session = await getSession(sql, orgId, params.proj, params.sess);
+        if (!session) return error("Session not found", 404);
+        const annotations = await listSessionAnnotations(sql, orgId, params.proj, params.sess);
+        return json({ annotations });
+      }
+
+      params = matchRoute(method, pathname, "/annotations/:id", "DELETE");
+      if (params) {
+        await deleteAnnotation(sql, orgId, params.id);
+        return json({ ok: true });
+      }
+
+      if (method === "GET" && pathname === "/decisions") {
+        const project = url.searchParams.get("project") ?? undefined;
+        if (project && !(await userCanAccessProject(sql, orgId, project, participantId))) {
+          return error("Forbidden: project is restricted to members", 403);
+        }
+        const limitParam = url.searchParams.get("limit");
+        const parsedLimit = limitParam ? Number.parseInt(limitParam, 10) : NaN;
+        const decisions = await listDecisions(sql, orgId, {
+          project,
+          limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+        });
+        return json({ decisions });
+      }
+
       // --- Search ---
 
       if (method === "GET" && pathname === "/search") {
         const q = url.searchParams.get("q");
         if (!q || !q.trim()) return error("q is required", 400);
+        const project = url.searchParams.get("project") ?? undefined;
+        if (project && !(await userCanAccessProject(sql, orgId, project, participantId))) {
+          return error("Forbidden: project is restricted to members", 403);
+        }
         const limitParam = url.searchParams.get("limit");
         const parsedLimit = limitParam ? Number.parseInt(limitParam, 10) : NaN;
         const { results } = await searchEvents(sql, orgId, {
           q,
-          project: url.searchParams.get("project") ?? undefined,
+          project,
           session: url.searchParams.get("session") ?? undefined,
           sender: url.searchParams.get("sender") ?? undefined,
           source: url.searchParams.get("source") ?? undefined,
+          tag: url.searchParams.get("tag") ?? undefined,
           limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
         });
         return json({ results });
