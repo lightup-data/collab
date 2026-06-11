@@ -54,26 +54,12 @@ export async function createDb(connectionString?: string): Promise<Sql> {
     )
   `;
 
-  // Migrate: if projects table exists without `id` column, drop and recreate
-  const [{ exists: hasId }] = await sql`
-    SELECT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_name = 'projects' AND column_name = 'id'
-    ) as exists
+  await sql`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      id TEXT PRIMARY KEY,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
   `;
-  if (!hasId) {
-    // Check if the old table exists at all
-    const [{ exists: hasTable }] = await sql`
-      SELECT EXISTS (
-        SELECT 1 FROM information_schema.tables WHERE table_name = 'projects'
-      ) as exists
-    `;
-    if (hasTable) {
-      await sql`DROP TABLE IF EXISTS events`;
-      await sql`DROP TABLE IF EXISTS sessions`;
-      await sql`DROP TABLE IF EXISTS projects`;
-    }
-  }
 
   await sql`
     CREATE TABLE IF NOT EXISTS projects (
@@ -119,7 +105,24 @@ export async function createDb(connectionString?: string): Promise<Sql> {
     CREATE INDEX IF NOT EXISTS idx_events_session ON events(project_id, session, timestamp)
   `;
 
+  await runMigrations(sql);
+
   return sql;
+}
+
+// Additive, idempotent migrations. Each statement uses IF NOT EXISTS so it is safe to
+// re-run on every startup; schema_migrations records what has been applied. NEVER drop a table.
+async function runMigrations(sql: Sql): Promise<void> {
+  const migrations: Array<{ id: string; run: () => Promise<unknown> }> = [
+    {
+      id: "001-sessions-label",
+      run: () => sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS label TEXT`,
+    },
+  ];
+  for (const migration of migrations) {
+    await migration.run();
+    await sql`INSERT INTO schema_migrations (id) VALUES (${migration.id}) ON CONFLICT (id) DO NOTHING`;
+  }
 }
 
 // --- Orgs ---
@@ -257,24 +260,29 @@ export async function createSession(
   name: string,
   driver: ParticipantId | null
 ): Promise<Session> {
+  // RETURNING * (not an explicit list) so this tolerates session tables created
+  // before the label migration (e.g. tests/helpers.ts resetTestData); label maps to null.
   const [row] = await sql`
     INSERT INTO sessions (name, project_id, org_id, driver)
     SELECT ${name}, p.id, ${orgId}, ${driver}
     FROM projects p WHERE p.org_id = ${orgId} AND p.name = ${project}
-    RETURNING name, driver, created_at
+    RETURNING *
   `;
   if (!row) throw new Error(`Project not found: ${project}`);
   return {
     name: row.name,
     project,
     driver: row.driver,
+    label: row.label ?? null,
     created_at: row.created_at.toISOString(),
   };
 }
 
 export async function getSession(sql: Sql, orgId: string, project: string, name: string): Promise<Session | null> {
+  // s.* (not explicit s.label) so this tolerates session tables created
+  // before the label migration (e.g. tests/helpers.ts resetTestData); label maps to null.
   const [row] = await sql`
-    SELECT s.name, p.name as project, s.driver, s.created_at
+    SELECT s.*, p.name as project
     FROM sessions s
     JOIN projects p ON s.project_id = p.id
     WHERE s.org_id = ${orgId} AND p.name = ${project} AND s.name = ${name}
@@ -284,6 +292,7 @@ export async function getSession(sql: Sql, orgId: string, project: string, name:
     name: row.name,
     project: row.project,
     driver: row.driver,
+    label: row.label ?? null,
     created_at: row.created_at.toISOString(),
   };
 }
@@ -291,14 +300,14 @@ export async function getSession(sql: Sql, orgId: string, project: string, name:
 export async function listSessions(sql: Sql, orgId: string, project?: string): Promise<Session[]> {
   const rows = project
     ? await sql`
-        SELECT s.name, p.name as project, s.driver, s.created_at
+        SELECT s.*, p.name as project
         FROM sessions s
         JOIN projects p ON s.project_id = p.id
         WHERE s.org_id = ${orgId} AND p.name = ${project}
         ORDER BY s.created_at ASC
       `
     : await sql`
-        SELECT s.name, p.name as project, s.driver, s.created_at
+        SELECT s.*, p.name as project
         FROM sessions s
         JOIN projects p ON s.project_id = p.id
         WHERE s.org_id = ${orgId}
@@ -308,6 +317,7 @@ export async function listSessions(sql: Sql, orgId: string, project?: string): P
     name: row.name,
     project: row.project,
     driver: row.driver,
+    label: row.label ?? null,
     created_at: row.created_at.toISOString(),
   }));
 }
@@ -343,6 +353,14 @@ export async function clearDriver(sql: Sql, orgId: string, project: string, sess
   `;
 }
 
+export async function setSessionLabel(sql: Sql, orgId: string, project: string, session: string, label: string): Promise<void> {
+  await sql`
+    UPDATE sessions SET label = ${label}
+    WHERE org_id = ${orgId} AND name = ${session}
+      AND project_id = (SELECT id FROM projects WHERE org_id = ${orgId} AND name = ${project})
+  `;
+}
+
 // --- Events (org-scoped) ---
 
 export async function pushEvent(sql: Sql, orgId: string, event: PolarisEvent): Promise<void> {
@@ -353,15 +371,7 @@ export async function pushEvent(sql: Sql, orgId: string, event: PolarisEvent): P
   `;
 }
 
-function rowToEvent(row: {
-  id: string;
-  project: string;
-  session: string;
-  timestamp: Date;
-  source: string;
-  sender: string;
-  payload: unknown;
-}): PolarisEvent {
+function rowToEvent(row: postgres.Row): PolarisEvent {
   return {
     id: row.id,
     project: row.project,
@@ -393,6 +403,82 @@ export async function getSessionEvents(sql: Sql, orgId: string, project: string,
     ORDER BY e.timestamp ASC
   `;
   return rows.map(rowToEvent);
+}
+
+export async function getSessionEventsPage(
+  sql: Sql,
+  orgId: string,
+  project: string,
+  session: string,
+  opts?: { limit?: number; before?: string }
+): Promise<{ events: PolarisEvent[]; nextCursor: string | null }> {
+  const limit = Math.min(Math.max(1, Math.floor(opts?.limit ?? 100)), 500);
+  // Cursor is `${iso_timestamp}|${id}`; keyset pagination on (timestamp, id) DESC.
+  let beforeTs: string | null = null;
+  let beforeId: string | null = null;
+  if (opts?.before) {
+    const sep = opts.before.lastIndexOf("|");
+    if (sep > 0) {
+      beforeTs = opts.before.slice(0, sep);
+      beforeId = opts.before.slice(sep + 1);
+    }
+  }
+  const rows = beforeTs && beforeId
+    ? await sql`
+        SELECT e.id, p.name as project, e.session, e.timestamp, e.source, e.sender, e.payload
+        FROM events e
+        JOIN projects p ON e.project_id = p.id
+        WHERE e.org_id = ${orgId} AND p.name = ${project} AND e.session = ${session}
+          AND (e.timestamp, e.id) < (${beforeTs}::timestamptz, ${beforeId}::uuid)
+        ORDER BY e.timestamp DESC, e.id DESC
+        LIMIT ${limit}
+      `
+    : await sql`
+        SELECT e.id, p.name as project, e.session, e.timestamp, e.source, e.sender, e.payload
+        FROM events e
+        JOIN projects p ON e.project_id = p.id
+        WHERE e.org_id = ${orgId} AND p.name = ${project} AND e.session = ${session}
+        ORDER BY e.timestamp DESC, e.id DESC
+        LIMIT ${limit}
+      `;
+  const events = rows.map(rowToEvent);
+  const oldest = events[events.length - 1];
+  const nextCursor = events.length === limit && oldest ? `${oldest.timestamp}|${oldest.id}` : null;
+  return { events, nextCursor };
+}
+
+// Query-time full-text search using the explicit two-arg ('english'::regconfig) form,
+// which is immutable-safe. No index for the alpha (small data).
+// FOLLOW-UP: trigger-maintained indexed search_tsv before scale
+export async function searchEvents(
+  sql: Sql,
+  orgId: string,
+  opts: { q: string; project?: string; session?: string; sender?: string; source?: string; limit?: number }
+): Promise<{ results: Array<{ event: PolarisEvent; snippet: string }> }> {
+  const limit = Math.min(Math.max(1, Math.floor(opts.limit ?? 50)), 100);
+  const rows = await sql`
+    SELECT e.id, p.name as project, e.session, e.timestamp, e.source, e.sender, e.payload,
+      ts_headline('english'::regconfig, t.text, q.query) as snippet,
+      ts_rank(to_tsvector('english'::regconfig, t.text), q.query) as score
+    FROM events e
+    JOIN projects p ON e.project_id = p.id
+    CROSS JOIN LATERAL (
+      SELECT coalesce(e.payload->>'prompt', '') || ' ' || coalesce(e.payload->>'stop_response', '') || ' ' ||
+        coalesce(e.payload->>'last_assistant_message', '') || ' ' || coalesce(e.payload->>'content', '') as text
+    ) t
+    CROSS JOIN LATERAL (SELECT websearch_to_tsquery('english', ${opts.q}) as query) q
+    WHERE e.org_id = ${orgId}
+      AND to_tsvector('english'::regconfig, t.text) @@ q.query
+      ${opts.project ? sql`AND p.name = ${opts.project}` : sql``}
+      ${opts.session ? sql`AND e.session = ${opts.session}` : sql``}
+      ${opts.sender ? sql`AND e.sender = ${opts.sender}` : sql``}
+      ${opts.source ? sql`AND e.source = ${opts.source}` : sql``}
+    ORDER BY score DESC, e.timestamp DESC
+    LIMIT ${limit}
+  `;
+  return {
+    results: rows.map((row) => ({ event: rowToEvent(row), snippet: row.snippet as string })),
+  };
 }
 
 export async function getOrgEventsSince(sql: Sql, orgId: string, since: string): Promise<PolarisEvent[]> {

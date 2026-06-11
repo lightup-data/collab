@@ -108,6 +108,7 @@ export const Session = z.object({
   name: z.string().min(1),
   project: z.string().min(1),
   driver: ParticipantId.nullable(),
+  label: z.string().nullable().optional(),
   created_at: z.string().datetime(),
 });
 
