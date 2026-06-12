@@ -267,17 +267,17 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
     try {
       const res = await daemonGet("/team");
       if (res.ok) {
-        const body = await res.json() as { members: Array<{ name: string; participant_id: string; slack_id: string | null; slack_handle: string | null; slack_display: string | null }> };
+        const body = await res.json() as { members: Array<{ name: string; participant_id: string | null; slack_id: string | null; slack_handle: string | null; slack_display: string | null; polaris_user: boolean }> };
         if (body.members.length === 0) {
           return { content: [{ type: "text", text: "No team members found." }] };
         }
-        const list = body.members
-          .filter((m) => m.slack_id) // only show members with Slack identity
-          .map((m) => `  @${m.slack_handle ?? m.slack_display} — ${m.name} [${m.slack_id}]`)
+        const taggable = body.members.filter((m) => m.slack_id && m.slack_handle);
+        const list = taggable
+          .map((m) => `  @${m.slack_handle} — ${m.name}${m.polaris_user ? " ✓" : ""} [${m.slack_id}]`)
           .join("\n");
-        const unlinked = body.members.filter((m) => !m.slack_id);
-        const unlinkedNote = unlinked.length > 0 ? `\n\nNot linked to Slack: ${unlinked.map(m => m.name).join(", ")}` : "";
-        return { content: [{ type: "text", text: `Team members (use @handle to tag):\n${list}${unlinkedNote}` }] };
+        const notTaggable = body.members.filter((m) => !m.slack_id);
+        const note = notTaggable.length > 0 ? `\n\nNot on Slack: ${notTaggable.map(m => m.name).join(", ")}` : "";
+        return { content: [{ type: "text", text: `Team members (use @handle to tag, ✓ = Polaris user):\n${list}${note}` }] };
       }
       return { content: [{ type: "text", text: "Failed to fetch team list." }] };
     } catch {

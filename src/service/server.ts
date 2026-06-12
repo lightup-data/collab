@@ -472,22 +472,35 @@ export async function startServer(opts: {
           } catch { /* Slack API unavailable */ }
         }
 
-        // Join Polaris users with Slack members by email (most reliable)
-        const team = users.map((u) => {
-          const slack = slackMembers.find((m) => m.email.toLowerCase() === u.email.toLowerCase())
-            ?? slackMembers.find((m) =>
-              m.name.toLowerCase() === u.name.toLowerCase() ||
-              m.display_name.toLowerCase() === u.name.toLowerCase().replace(/\s+/g, ".")
-            );
+        // Build team from ALL Slack workspace members, annotate with Polaris identity
+        const matchedEmails = new Set<string>();
+        const team = slackMembers.map((m) => {
+          const polarisUser = users.find((u) => u.email.toLowerCase() === m.email.toLowerCase())
+            ?? users.find((u) => u.name.toLowerCase() === m.name.toLowerCase());
+          if (polarisUser) matchedEmails.add(polarisUser.email.toLowerCase());
           return {
-            name: u.name,
-            participant_id: u.participant_id,
-            email: u.email,
-            slack_id: slack?.id ?? null,
-            slack_handle: slack?.username || null,
-            slack_display: slack?.display_name || slack?.name || null,
+            name: m.name || m.display_name || m.username,
+            slack_id: m.id,
+            slack_handle: m.username,
+            slack_display: m.display_name || m.name,
+            participant_id: polarisUser?.participant_id ?? null,
+            polaris_user: !!polarisUser,
           };
         });
+
+        // Add Polaris users not in Slack (e.g., synthetic test users)
+        for (const u of users) {
+          if (!matchedEmails.has(u.email.toLowerCase())) {
+            team.push({
+              name: u.name,
+              slack_id: null,
+              slack_handle: null,
+              slack_display: null,
+              participant_id: u.participant_id,
+              polaris_user: true,
+            });
+          }
+        }
 
         return json({ members: team });
       }
