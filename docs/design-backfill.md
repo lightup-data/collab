@@ -139,6 +139,23 @@ Response:
 3. **Slack recovery summary** — nice to have, reuse the pattern from the manual recovery we did
 4. **Deduplication** — important for correctness, add after basic replay works
 
+## Name Changes During Gap
+
+Project renames, session changes, and Slack channel renames can happen during a gap. Backfill must handle these correctly.
+
+**Key insight**: The daemon log stores raw hook payloads, not project/session names. The daemon adds the project/session from its session mapping at relay time. So on replay, the daemon should use the *current* mapping, not reconstruct a historical one.
+
+| Change during gap | Impact | Handling |
+|---|---|---|
+| Project renamed | Log doesn't contain project name — daemon resolves it from current mapping | Works automatically |
+| Slack channel renamed | Bridge looks up channel by project → channel ID in DB | Works if DB mapping is current |
+| User switched projects | Log has events for both time periods | Filter by timestamp range per project |
+| Session handed off to new driver | Sender identity changes | Use current session's driver/agent at replay time |
+
+**Transcript fallback complication**: The transcript doesn't know about Polaris projects/sessions at all. When parsing the transcript, backfill must ask: "which project was this CC session connected to at this timestamp?" The daemon log has `/connect` entries that establish the timeline of project associations. If the daemon log is also missing, the current session mapping is the only reference — which may not reflect historical state.
+
+**Recommendation**: Always log `/connect` and `/disconnect` events to a separate persistent file (`~/.polaris/session-history.jsonl`) that survives daemon restarts. This gives backfill a reliable timeline of which CC session was in which project at what time.
+
 ## Open Questions
 
 1. **Should backfill be automatic?** The daemon could detect gaps on startup (compare last log entry to last API event) and auto-backfill. Risk: could replay stale events unintentionally.
@@ -148,3 +165,5 @@ Response:
 3. **Multi-day gaps**: The daemon log is per-day. A multi-day outage requires reading multiple files. The transcript spans the whole session.
 
 4. **Cross-session backfill**: If the user was in session A, disconnected, joined session B, and wants to backfill A — the daemon log has events for both. Need to filter by session/project.
+
+5. **Session history persistence**: Should we add `~/.polaris/session-history.jsonl` now (cheap, foundational for backfill) or defer until backfill is implemented?
