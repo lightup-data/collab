@@ -13,7 +13,7 @@ export function renderLandingPage(): string {
         <!-- Left: text -->
         <div>
           <h1 class="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
-            Meet Polaris. It's like Gong<br>for Claude Code sessions.
+            Meet Polaris.<br>It's like Gong for Claude Code sessions.
           </h1>
           <p class="mt-6 text-lg text-gray-500">
             Bring your local Claude Code sessions straight into a collaborative Slack channel. Polaris works in the background to automatically capture and document the AI's entire execution path including all prompts, responses, and tool calls in real time. Teammates can watch the live log stream, intervene with inline commands via Slack, or audit the complete thought process later.
@@ -220,6 +220,56 @@ export function renderLandingPage(): string {
           </div>
 
         </div>
+      </div>
+    </div>
+
+    <!-- What you can do with Polaris -->
+    <div class="py-16 border-t border-gray-200">
+      <div class="max-w-3xl mx-auto px-6">
+        <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">What you can do with Polaris</h2>
+
+        <div class="mt-8 space-y-8">
+          <div>
+            <h3 class="font-semibold text-gray-900">Start streaming your session</h3>
+            <div class="mt-2 bg-gray-900 text-gray-300 text-sm px-4 py-2.5 rounded-lg font-mono"><span class="text-polaris-400">&gt;</span> /polaris join #webapp</div>
+            <p class="mt-2 text-sm text-gray-500">Every prompt, response, and tool call streams to your team's Slack channel in real time.</p>
+          </div>
+          <div>
+            <h3 class="font-semibold text-gray-900">Pull a teammate into your session</h3>
+            <div class="mt-2 bg-gray-900 text-gray-300 text-sm px-4 py-2.5 rounded-lg font-mono"><span class="text-polaris-400">&gt;</span> /polaris tag @bob I need your input on this auth approach</div>
+            <p class="mt-2 text-sm text-gray-500">Bob gets notified in Slack with full context. His reply appears inline in your terminal.</p>
+          </div>
+          <div>
+            <h3 class="font-semibold text-gray-900">Catch up on a teammate's session</h3>
+            <div class="mt-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5 flex items-center gap-2">
+              <svg class="w-4 h-4 text-[#4A154B] shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.124 2.521a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.52 2.521h-2.522V8.834zm-1.271 0a2.528 2.528 0 0 1-2.521 2.521 2.528 2.528 0 0 1-2.521-2.521V2.522A2.528 2.528 0 0 1 15.165 0a2.528 2.528 0 0 1 2.522 2.522v6.312zm-2.522 10.124a2.528 2.528 0 0 1 2.522 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.521-2.52v-2.523h2.521zm0-1.271a2.527 2.527 0 0 1-2.521-2.521 2.528 2.528 0 0 1 2.521-2.521h6.313A2.528 2.528 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.522h-6.313z"/></svg>
+              <span class="text-sm text-gray-700 font-mono"><span class="text-blue-600 font-medium">@polaris</span> summarize alice last 2h</span>
+            </div>
+            <p class="mt-2 text-sm text-gray-500">Get a summary of what happened — what was built, what decisions were made, what's still in progress.</p>
+          </div>
+          <div>
+            <h3 class="font-semibold text-gray-900">Redirect an agent from Slack</h3>
+            <div class="mt-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5 flex items-center gap-2">
+              <svg class="w-4 h-4 text-[#4A154B] shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.124 2.521a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.52 2.521h-2.522V8.834zm-1.271 0a2.528 2.528 0 0 1-2.521 2.521 2.528 2.528 0 0 1-2.521-2.521V2.522A2.528 2.528 0 0 1 15.165 0a2.528 2.528 0 0 1 2.522 2.522v6.312zm-2.522 10.124a2.528 2.528 0 0 1 2.522 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.521-2.52v-2.523h2.521zm0-1.271a2.527 2.527 0 0 1-2.521-2.521 2.528 2.528 0 0 1 2.521-2.521h6.313A2.528 2.528 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.522h-6.313z"/></svg>
+              <span class="text-sm text-gray-700 font-mono"><span class="text-blue-600 font-medium">@agent.alice</span> use RS256, not HS256 &mdash; we need asymmetric keys</span>
+            </div>
+            <p class="mt-2 text-sm text-gray-500">Your message lands directly in Alice's coding session. The agent picks it up and adjusts.</p>
+          </div>
+          <div>
+            <h3 class="font-semibold text-gray-900">Attach session context to a PR</h3>
+            <div class="mt-2 bg-gray-900 text-gray-300 text-sm px-4 py-2.5 rounded-lg font-mono"><span class="text-polaris-400">&gt;</span> /polaris attach-pr #482</div>
+            <p class="mt-2 text-sm text-gray-500">Adds a session transcript — prompts, decisions, and reasoning — to the pull request. Reviewers see the "why," not just the "what."</p>
+          </div>
+          <div>
+            <h3 class="font-semibold text-gray-900">Search past sessions</h3>
+            <div class="mt-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5 flex items-center gap-2">
+              <svg class="w-4 h-4 text-[#4A154B] shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.124 2.521a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.52 2.521h-2.522V8.834zm-1.271 0a2.528 2.528 0 0 1-2.521 2.521 2.528 2.528 0 0 1-2.521-2.521V2.522A2.528 2.528 0 0 1 15.165 0a2.528 2.528 0 0 1 2.522 2.522v6.312zm-2.522 10.124a2.528 2.528 0 0 1 2.522 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.521-2.52v-2.523h2.521zm0-1.271a2.527 2.527 0 0 1-2.521-2.521 2.528 2.528 0 0 1 2.521-2.521h6.313A2.528 2.528 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.522h-6.313z"/></svg>
+              <span class="text-sm text-gray-700 font-mono"><span class="text-blue-600 font-medium">@polaris</span> search "webhook secret rotation"</span>
+            </div>
+            <p class="mt-2 text-sm text-gray-500">Find when and why a decision was made, across all sessions.</p>
+          </div>
+        </div>
+
       </div>
     </div>
 
