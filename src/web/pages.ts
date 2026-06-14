@@ -7,21 +7,21 @@ export function renderLandingPage(): string {
   return `
     ${nav()}
     <!-- Hero: text left, hub diagram right -->
-    <div class="max-w-6xl mx-auto px-6 pt-24 pb-16">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 pt-16 sm:pt-24 pb-16 overflow-hidden">
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
 
         <!-- Left: text -->
-        <div>
-          <h1 class="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+        <div class="min-w-0">
+          <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 lg:text-5xl">
             Meet Polaris.<br>It's like Gong for Claude Code sessions.
           </h1>
-          <p class="mt-6 text-lg text-gray-500">
+          <p class="mt-6 text-base sm:text-lg text-gray-500">
             Bring your local Claude Code sessions straight into a collaborative Slack channel. Polaris works in the background to automatically capture and document the AI's entire execution path including all prompts, responses, and tool calls in real time. Teammates can watch the live log stream, intervene with inline commands via Slack, or audit the complete thought process later.
           </p>
         </div>
 
         <!-- Right: hub diagram -->
-        <div class="flex flex-col items-center">
+        <div class="flex flex-col items-center overflow-hidden">
 
           <!-- Slack node -->
           <div class="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg shadow-sm">
@@ -49,7 +49,7 @@ export function renderLandingPage(): string {
           </div>
 
           <!-- Branching arrows: Polaris ↔ sessions -->
-          <svg class="w-80 h-16 text-gray-300" viewBox="0 0 320 64" fill="none" stroke="currentColor" stroke-width="1.5" overflow="visible">
+          <svg class="w-64 md:w-80 h-16 text-gray-300" viewBox="0 0 320 64" fill="none" stroke="currentColor" stroke-width="1.5" overflow="visible">
             <path d="M160 0 L160 20" stroke-linecap="round"/>
             <path d="M157 20 L160 0 L163 20" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M160 20 L48 58" stroke-linecap="round"/>
@@ -61,12 +61,12 @@ export function renderLandingPage(): string {
           </svg>
 
           <!-- Session nodes -->
-          <div class="flex items-start gap-6">
+          <div class="flex flex-wrap justify-center items-start gap-4 md:gap-6">
             <div class="flex items-center gap-2 px-4 py-2.5 bg-gray-900 rounded-lg shadow-sm">
               <img class="w-5 h-5" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAoAAAAKACAMAAAA7EzkRAAAAFVBMVEVMaXHZd1fZd1babUjZd1faf1rZd1epRaWRAAAABnRSTlMAXawH8g5t5RLrAAAACXBIWXMAAAsTAAALEwEAmpwYAAAFOklEQVR42u3WUQ6EIAxAQcDV+x95r1Bjk2Kdid81wkMdAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADebtHa9gFedPYTIAIUoAAFiAAFKEABIkABClCACFCAAhQgAkSAAkSACFCACBABChABIkABIkAEKEAEiAAFiAARoAARIAIUIAJEgAJEgAhQgAgQAQoQASJAAQpQgAhQgAIUIAIUoAAFiAAFKEABIkABClCACBABChABIkABIkAEKEAEiAAFiAARoAARIAIUIAJEgAJEgAhQgAgQAQoQASJAASJABChABIgABShAASJAAQpQgAhQgAIUIAIUoAAFiAARoAARIAIUIAJEgAJEgAhQgAjwnjNmfq2EGVwYAT4UvO33AqzZDwEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoACTHTHfCzC4MNkBHsnGBYUEiAARIAgQAYIAESAIEAGCABEgCBABggARIAgQAYIAESAIEAGCABEgCBABggARIAgQAYIAESAIEAEiQBAgAgQBIkAQIAIEASJAECACBAEiQBAgAgQBIkAQIAIEASJAECACBAEiQBAgAgQBIkAQIAIEASJABAgCRIAgQAQIAkSAIEAECAJEgCBABAgCRIDwNMCVzJL2lt3LyGaLmr+xdmeLBChABIgABYgAEaAAESACFCACRIACRIAIUIAIEAEKEAEiQAEiQAQoQASIAAWIABGgABEgAhQgAkSAAhSgABGgAAUoQAQoQAEKEAEKUIACRIAIUIAIEAEKEAEiQAEiQAQoQASIAAWIABGgABEgAhQgAkSAAkSACFCACBABChABIkABIkAEKEABChABClCAAkSAAhSgABGgAAUoQAQoQAEKEAEiQAEiQAQoQASIAAWIABGgABEgAhQgAkSAAkSACDDJjFnRBy6aVyb6HKto3mhiJp+4W/OOXa8bX5CZ/EVqU9YbAuzwCyNAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKUIACFKAABShAAQpQgAIUoAAFKEABClCAAhSgAAUoQAEKcEvnDCqaV3cyg86ieQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwJv8Af3P8SOrUE9bAAAAAElFTkSuQmCC"/>
               <span class="text-xs text-gray-300">Alice working on auth</span>
             </div>
-            <div class="flex items-center gap-2 px-4 py-2.5 mt-10 bg-white border border-gray-200 rounded-lg shadow-sm">
+            <div class="flex items-center gap-2 px-4 py-2.5 md:mt-10 bg-white border border-gray-200 rounded-lg shadow-sm">
               <svg class="w-4 h-4 text-blue-500" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C8 4.4 4.4 8 0 8c4.4 0 8 3.6 8 8 0-4.4 3.6-8 8-8-4.4 0-8-3.6-8-8z"/></svg>
               <span class="text-xs text-gray-700">Martha writing docs</span>
             </div>
@@ -151,7 +151,7 @@ export function renderLandingPage(): string {
         </div>
 
         <!-- Arrows -->
-        <div class="max-w-[30rem] mx-auto grid grid-cols-2 gap-4 py-3">
+        <div class="max-w-[30rem] mx-auto grid grid-cols-2 gap-4 py-3 hidden md:grid">
           <div class="flex justify-center">
             <svg class="w-6 h-10 text-gray-300" viewBox="0 0 24 40" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M8 4 L8 36 M4 8 L8 4 L12 8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -167,7 +167,7 @@ export function renderLandingPage(): string {
         </div>
 
         <!-- Row 2: CLI sessions -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
 
           <!-- Alice's terminal -->
           <div class="bg-gray-900 rounded-xl overflow-hidden shadow-xl">
@@ -231,17 +231,17 @@ export function renderLandingPage(): string {
         <div class="mt-8 space-y-8">
           <div>
             <h3 class="font-semibold text-gray-900">Start streaming your session</h3>
-            <div class="mt-2 bg-gray-900 text-gray-300 text-sm px-4 py-2.5 rounded-lg font-mono"><span class="text-polaris-400">&gt;</span> /polaris join #webapp</div>
+            <div class="mt-2 bg-gray-900 text-gray-300 text-sm px-4 py-2.5 rounded-lg font-mono overflow-x-auto"><span class="text-polaris-400">&gt;</span> /polaris join #webapp</div>
             <p class="mt-2 text-sm text-gray-500">Every prompt, response, and tool call streams to your team's Slack channel in real time.</p>
           </div>
           <div>
             <h3 class="font-semibold text-gray-900">Pull a teammate into your session</h3>
-            <div class="mt-2 bg-gray-900 text-gray-300 text-sm px-4 py-2.5 rounded-lg font-mono"><span class="text-polaris-400">&gt;</span> /polaris tag @bob I need your input on this auth approach</div>
+            <div class="mt-2 bg-gray-900 text-gray-300 text-sm px-4 py-2.5 rounded-lg font-mono overflow-x-auto"><span class="text-polaris-400">&gt;</span> /polaris tag @bob I need your input on this auth approach</div>
             <p class="mt-2 text-sm text-gray-500">Bob gets notified in Slack with full context. His reply appears inline in your terminal.</p>
           </div>
           <div>
             <h3 class="font-semibold text-gray-900">Catch up on a teammate's session</h3>
-            <div class="mt-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5 flex items-center gap-2">
+            <div class="mt-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5 flex items-start gap-2 overflow-x-auto">
               <svg class="w-4 h-4 text-[#4A154B] shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.124 2.521a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.52 2.521h-2.522V8.834zm-1.271 0a2.528 2.528 0 0 1-2.521 2.521 2.528 2.528 0 0 1-2.521-2.521V2.522A2.528 2.528 0 0 1 15.165 0a2.528 2.528 0 0 1 2.522 2.522v6.312zm-2.522 10.124a2.528 2.528 0 0 1 2.522 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.521-2.52v-2.523h2.521zm0-1.271a2.527 2.527 0 0 1-2.521-2.521 2.528 2.528 0 0 1 2.521-2.521h6.313A2.528 2.528 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.522h-6.313z"/></svg>
               <span class="text-sm text-gray-700 font-mono"><span class="text-blue-600 font-medium">@polaris</span> summarize alice last 2h</span>
             </div>
@@ -249,7 +249,7 @@ export function renderLandingPage(): string {
           </div>
           <div>
             <h3 class="font-semibold text-gray-900">Redirect an agent from Slack</h3>
-            <div class="mt-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5 flex items-center gap-2">
+            <div class="mt-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5 flex items-start gap-2 overflow-x-auto">
               <svg class="w-4 h-4 text-[#4A154B] shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.124 2.521a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.52 2.521h-2.522V8.834zm-1.271 0a2.528 2.528 0 0 1-2.521 2.521 2.528 2.528 0 0 1-2.521-2.521V2.522A2.528 2.528 0 0 1 15.165 0a2.528 2.528 0 0 1 2.522 2.522v6.312zm-2.522 10.124a2.528 2.528 0 0 1 2.522 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.521-2.52v-2.523h2.521zm0-1.271a2.527 2.527 0 0 1-2.521-2.521 2.528 2.528 0 0 1 2.521-2.521h6.313A2.528 2.528 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.522h-6.313z"/></svg>
               <span class="text-sm text-gray-700 font-mono"><span class="text-blue-600 font-medium">@agent.alice</span> use RS256, not HS256 &mdash; we need asymmetric keys</span>
             </div>
@@ -257,12 +257,12 @@ export function renderLandingPage(): string {
           </div>
           <div>
             <h3 class="font-semibold text-gray-900">Attach session context to a PR</h3>
-            <div class="mt-2 bg-gray-900 text-gray-300 text-sm px-4 py-2.5 rounded-lg font-mono"><span class="text-polaris-400">&gt;</span> /polaris attach-pr #482</div>
+            <div class="mt-2 bg-gray-900 text-gray-300 text-sm px-4 py-2.5 rounded-lg font-mono overflow-x-auto"><span class="text-polaris-400">&gt;</span> /polaris attach-pr #482</div>
             <p class="mt-2 text-sm text-gray-500">Adds a session transcript — prompts, decisions, and reasoning — to the pull request. Reviewers see the "why," not just the "what."</p>
           </div>
           <div>
             <h3 class="font-semibold text-gray-900">Search past sessions</h3>
-            <div class="mt-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5 flex items-center gap-2">
+            <div class="mt-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5 flex items-start gap-2 overflow-x-auto">
               <svg class="w-4 h-4 text-[#4A154B] shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.124 2.521a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.52 2.521h-2.522V8.834zm-1.271 0a2.528 2.528 0 0 1-2.521 2.521 2.528 2.528 0 0 1-2.521-2.521V2.522A2.528 2.528 0 0 1 15.165 0a2.528 2.528 0 0 1 2.522 2.522v6.312zm-2.522 10.124a2.528 2.528 0 0 1 2.522 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.521-2.52v-2.523h2.521zm0-1.271a2.527 2.527 0 0 1-2.521-2.521 2.528 2.528 0 0 1 2.521-2.521h6.313A2.528 2.528 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.522h-6.313z"/></svg>
               <span class="text-sm text-gray-700 font-mono"><span class="text-blue-600 font-medium">@polaris</span> search "webhook secret rotation"</span>
             </div>
