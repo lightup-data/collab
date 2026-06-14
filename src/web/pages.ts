@@ -49,7 +49,8 @@ export function renderLandingPage(): string {
           </div>
 
           <!-- Branching arrows: Polaris ↔ sessions -->
-          <svg class="w-64 md:w-80 h-16 text-gray-300" viewBox="0 0 320 64" fill="none" stroke="currentColor" stroke-width="1.5" overflow="visible">
+          <!-- Branching arrows: desktop -->
+          <svg class="hidden md:block w-80 h-16 text-gray-300" viewBox="0 0 320 64" fill="none" stroke="currentColor" stroke-width="1.5" overflow="visible">
             <path d="M160 0 L160 20" stroke-linecap="round"/>
             <path d="M157 20 L160 0 L163 20" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M160 20 L48 58" stroke-linecap="round"/>
@@ -58,6 +59,11 @@ export function renderLandingPage(): string {
             <path d="M157 101 L160 104 L163 101" stroke-linecap="round" stroke-linejoin="round"/>
             <path d="M160 20 L272 58" stroke-linecap="round"/>
             <path d="M260 54 L272 58 L268 46" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <!-- Branching arrow: mobile (simple vertical) -->
+          <svg class="md:hidden w-5 h-8 text-gray-300" viewBox="0 0 20 32" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M7 4 L7 28 M4 7 L7 4 L10 7" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M13 28 L13 4 M10 25 L13 28 L16 25" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
 
           <!-- Session nodes -->
@@ -150,8 +156,14 @@ export function renderLandingPage(): string {
           </div>
         </div>
 
-        <!-- Arrows -->
-        <div class="max-w-[30rem] mx-auto grid grid-cols-2 gap-4 py-3">
+        <!-- Arrows: single on mobile, two-column on desktop -->
+        <div class="flex justify-center md:hidden py-3">
+          <svg class="w-6 h-10 text-gray-300" viewBox="0 0 24 40" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M8 4 L8 36 M4 8 L8 4 L12 8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16 36 L16 4 M12 32 L16 36 L20 32" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="max-w-[30rem] mx-auto hidden md:grid grid-cols-2 gap-4 py-3">
           <div class="flex justify-center">
             <svg class="w-6 h-10 text-gray-300" viewBox="0 0 24 40" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M8 4 L8 36 M4 8 L8 4 L12 8" stroke-linecap="round" stroke-linejoin="round"/>
